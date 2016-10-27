@@ -110,12 +110,6 @@ def SamplingLayer(
 
 
 def GaussianLogDensity(x, mu, log_var, name):
-    # with tf.variable_scope('GaussianLogDensityLayer'):
-        # n_x = x.get_shape().as_list()[0]
-        # n_u = mu.get_shape().as_list()[0]
-        # m = n_x / n_u
-        # mu = tf.tile(mu, [m, 1])
-        # log_var = tf.tile(log_var, [m, 1])
     c = np.log(2 * np.pi)
     var = tf.exp(log_var)
     x_mu2 = tf.square(tf.sub(x, mu))   # [Issue] not sure the dim works or not?
@@ -235,6 +229,14 @@ class VAE2(object):
                     z_lv = tf.add(tf.matmul(x, w), b)
         return z_mu, z_lv
 
+    def encode(self, x):
+        z_mu, _ = self._encode(x)
+        return z_mu
+
+    def decode(self, z, y):
+        xh_mu, _ = self._decode(z, y)
+        return xh_mu
+
     def _decode(self, z, y):
         var = self.variables
         net = 'decoder'
@@ -259,6 +261,9 @@ class VAE2(object):
                     w = var[net]['out_mu']['weight']
                     b = var[net]['out_mu']['bias']
                     z_lv = tf.add(tf.matmul(x, w), b)
+
+                    # [TODO] Variance disabled.
+                    z_lv = tf.zeros(tf.shape(z_lv))
         return z_mu, z_lv
 
     def _compute_latent_objective(self, z_mu, z_lv):

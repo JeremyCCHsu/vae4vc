@@ -29,7 +29,7 @@ FLAGS = tf.app.flags.FLAGS
 # tf.app.flags.DEFINE_string('target', 'TM3', 'list of target speakers')
 # tf.app.flags.DEFINE_string('{:s}-{:s}-trn', '', 'data dir')
 tf.app.flags.DEFINE_string(
-    'datadir', '/home/jrm/proj/vc2016b/SF1-TM3-trn', 'data dir')
+    'datadir', '/home/jrm/proj/vc2016b/S-T-trn', 'data dir')
 tf.app.flags.DEFINE_string(
     'architecture', 'architecture.json', 'network architecture')
 tf.app.flags.DEFINE_string(
@@ -42,6 +42,8 @@ tf.app.flags.DEFINE_integer('batch_size', 128, 'batch size')
 tf.app.flags.DEFINE_float('l2_regularization', 0.0, 'L2 regularization')
 tf.app.flags.DEFINE_float('lr', 1e-3, 'learning rate')
 tf.app.flags.DEFINE_integer('num_steps', 10000, 'num of steps (frames)')
+tf.app.flags.DEFINE_string(
+    'file_filter', '.*\.bin', 'filename filter')
 
 def save(saver, sess, logdir, step):
     model_name = 'model.ckpt'
@@ -155,11 +157,12 @@ def main():
         # # ....
         # spectral_batch = reader.dequeue(FLAGS.batch_size)
         x, y = vc2016TFReader(
-            data_dir=FLAGS.datadir,
+            datadir=FLAGS.datadir,
             batch_size=FLAGS.batch_size,
             num_examples_per_epoch=200000,
             num_preprocess_threads=10,
             min_fraction_of_examples_in_queue=0.005,
+            pattern=FLAGS.file_filter,
             feature='log-spectrum')
         # [TODO] num_example_per_epoch: compute from datadir
 

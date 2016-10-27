@@ -20,24 +20,42 @@ frame_bytes = mFea * 4
 record_bytes = label_bytes + frame_bytes
 
 
+def find_files(directory, pattern='.*\.wav'):
+    '''Recursively finds all files matching the pattern.'''
+    files = []
+    for root, dirnames, filenames in os.walk(directory):
+        # for filename in fnmatch.filter(filenames, pattern):
+        for filename in filenames:
+            if re.match(pattern, filename):
+                files.append(os.path.join(root, filename))
+    # [DEBUG]
+    # files = sorted(files)
+    # with open('test.txt', 'w') as f:
+    #     for filename in files:
+    #         f.write('{:s}\n'.format(filename))
+    return files
+
 def vc2016TFReader(
-    data_dir,
+    datadir,
     batch_size,
     num_examples_per_epoch,
     num_preprocess_threads=10,
     min_fraction_of_examples_in_queue=0.4,
+    pattern='*.bin',
     feature='log-spectrum'):
     min_after_dequeue = int(
         num_examples_per_epoch * min_fraction_of_examples_in_queue)
     capacity = min_after_dequeue + 3 * batch_size
 
-    filenames = os.listdir(data_dir)
-    filenames = [
-        os.path.join(data_dir, f) for f in filenames
-        if f is not os.path.isdir(f)]
+    files = find_files(datadir, pattern=pattern)
+    print('Reading {:d} files from {:s}'.format(len(files), datadir))
+    # filenames = os.listdir(data_dir)
+    # filenames = [
+    #     os.path.join(data_dir, f) for f in filenames
+    #     if f is not os.path.isdir(f)]
 
     with tf.variable_scope('input'):
-        filename_queue = tf.train.string_input_producer(filenames)
+        filename_queue = tf.train.string_input_producer(files)
 
         # Specify length of record
         reader = tf.FixedLengthRecordReader(record_bytes)
@@ -95,3 +113,46 @@ def vc2016TFReader(
             min_after_dequeue=min_after_dequeue)
 
     return frames, labels
+
+
+
+def vc2016TFWholeReader(
+        datadir,
+        # batch_size=None,
+        mFea=514,
+        pattern='*.bin',
+        feature='log-spectrum',
+        output_filename=False):
+    '''
+    Output: rows of [label, spectrum]
+            *need to strip off the label outside the function
+    '''
+    # mFea = 514
+    # datadir = '/home/jrm/proj/vc2016b/SF1-TM3-trn'
+
+
+    files = find_files(datadir, pattern=pattern)
+    # print(files)
+
+    filename_queue = tf.train.string_input_producer(
+        files, name='filename_queue')
+
+    reader = tf.WholeFileReader()
+    key, value = reader.read(filename_queue)
+    spectrum = tf.decode_raw(
+        value,
+        tf.float32,
+        little_endian=True,
+        name='y_x_raw')
+
+    spectrum = tf.reshape(spectrum, [-1, mFea])  
+    
+    label = spectrum[:, 0]
+    spectrum = spectrum[:, 1:]
+
+    if output_filename:
+        return label, spectrum, key
+    else:
+        return label, spectrum
+
+
