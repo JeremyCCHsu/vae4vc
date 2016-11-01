@@ -22,7 +22,7 @@ FLAGS = tf.app.flags.FLAGS
 # tf.app.flags.DEFINE_string('target', 'TM3', 'list of target speakers')
 # tf.app.flags.DEFINE_string('{:s}-{:s}-trn', '', 'data dir')
 tf.app.flags.DEFINE_string(
-    'datadir', '/home/jrm/proj/vc2016b/S-T-trn', 'data dir')
+    'datadir', '/home/jrm/proj/vc2016b/TR_log_SP_Z_LT8000', 'data dir')
 tf.app.flags.DEFINE_string(
     'architecture', 'architecture.json', 'network architecture')
 tf.app.flags.DEFINE_string('logdir', 'logdir', 'log dir')
@@ -46,7 +46,8 @@ N_SPEAKER = 10
 
 def main():
     if FLAGS.checkpoint is None:
-        raise
+        print('[ERROR] You must specify a checkpoint file.')
+        sys.exit(0)
 
     # FLAGS
     started_datestring = "{0:%Y-%m%d-%H%M-%S}".format(datetime.now())
@@ -89,14 +90,10 @@ def main():
     print('Restoring model from {}'.format(FLAGS.checkpoint))
     saver.restore(sess, FLAGS.checkpoint)
 
-    # print(1)
+
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
-    # print(2)
-    
 
-    # print(3)
     try:
-
         # ========== Plot 1) src spec  2) z  3) converted spec  4) plot z ==========
         z_all = list()
         x_all = list()
@@ -127,46 +124,43 @@ def main():
             z_all.append(z)
             xh_all.append(xh)
             names.append(x_fname)
-
-        pdb.set_trace()
-
-        # tmp = np.concatenate(z_all, axis=0)
-        # zsd = tmp.std(0)
-        # idx = sorted(zip(zsd, range(len(zsd))))
-        # idx = [v for k, v in idx]
-        # for i in range(10):
-        #     plt.figure()
-        #     plt.subplot(411)
-        #     plt.imshow(np.flipud(x_all[i].T), aspect='auto')
-        #     plt.subplots_adjust(hspace=0.001)
-        #     plt.subplot(412)
-        #     plt.imshow(z_all[i][:, idx].T)
-        #     plt.subplots_adjust(hspace=0.001)
-        #     tmp = z_all[i][:, idx]
-        #     plt.subplot(414)
-        #     plt.plot(tmp[:, -8:])
-        #     plt.xlim([0, tmp.shape[0]])
-        #     plt.subplot(413)
-        #     plt.imshow(np.flipud(xh_all[i].T), aspect='auto')
-        #     plt.subplots_adjust(hspace=0.001)
-        #     plt.savefig('test-{:s}.png'.format(names[i]))
-        #     plt.close()
+        tmp = np.concatenate(z_all, axis=0)
+        zsd = tmp.std(0)
+        idx = sorted(zip(zsd, range(len(zsd))))
+        idx = [v for k, v in idx]
+        for i in range(10):
+            plt.figure()
+            plt.subplot(411)
+            plt.imshow(np.flipud(x_all[i].T), aspect='auto')
+            plt.subplots_adjust(hspace=0.001)
+            plt.subplot(412)
+            plt.imshow(z_all[i][:, idx].T)
+            plt.subplots_adjust(hspace=0.001)
+            tmp = z_all[i][:, idx]
+            plt.subplot(414)
+            plt.plot(tmp[:, -8:])
+            plt.xlim([0, tmp.shape[0]])
+            plt.subplot(413)
+            plt.imshow(np.flipud(xh_all[i].T), aspect='auto')
+            plt.subplots_adjust(hspace=0.001)
+            plt.savefig('test-{:s}.png'.format(names[i]))
+            plt.close()
             
 
 
-        # # ============ Plot converted spectra (10 subplots) ==========
-        # # x_source = sess.run(spectrum)
-        # plt.figure(figsize=(48, 12))
-        # for spk in range(10):
-        #     y_target = np.zeros([x_source.shape[0], N_SPEAKER])
-        #     y_target[:, spk] = 1.0
-        #     x_converted = sess.run(xh_, feed_dict={x_: x_source, y_: y_target})
-        #     plt.subplot(3, 4, spk + 1)
-        #     plt.imshow(np.flipud(x_converted.T), aspect='auto')
-        #     # plt.axis('off')
-        #     # plt.subplots_adjust(hspace=0.001) #, wspace=0.001)
-        #     plt.title(id2name[spk])
-        # plt.savefig('test-{:s}-as-source.png'.format(x_fname))
+        # ============ Plot converted spectra (10 subplots) ==========
+        # x_source = sess.run(spectrum)
+        plt.figure(figsize=(48, 12))
+        for spk in range(10):
+            y_target = np.zeros([x_source.shape[0], N_SPEAKER])
+            y_target[:, spk] = 1.0
+            x_converted = sess.run(xh_, feed_dict={x_: x_source, y_: y_target})
+            plt.subplot(3, 4, spk + 1)
+            plt.imshow(np.flipud(x_converted.T), aspect='auto')
+            # plt.axis('off')
+            # plt.subplots_adjust(hspace=0.001) #, wspace=0.001)
+            plt.title(id2name[spk])
+        plt.savefig('test-{:s}-as-source.png'.format(x_fname))
 
 
     except KeyboardInterrupt:
@@ -175,21 +169,6 @@ def main():
         coord.request_stop()
         coord.join(threads)
 
-
-
-# def measure_mcd():
-    # ''' This is actually a validation function '''
-    # [TODO] write this in validate.py
-
-    # Note: the reader need not to be Tensorflow! (not a tensor)
-
-    # read the source
-
-    # read the target, these 2 are tied (maybe a simple sort?)
-
-    # convert from the source to the target
-
-    # compute the MCD
 
 
 if __name__ == '__main__':

@@ -28,8 +28,11 @@ FLAGS = tf.app.flags.FLAGS
 # tf.app.flags.DEFINE_string('source', 'SF1', 'list of source speakers')
 # tf.app.flags.DEFINE_string('target', 'TM3', 'list of target speakers')
 # tf.app.flags.DEFINE_string('{:s}-{:s}-trn', '', 'data dir')
+# tf.app.flags.DEFINE_string(
+#     'datadir', '/home/jrm/proj/vc2016b/S-T-trn', 'data dir')
 tf.app.flags.DEFINE_string(
-    'datadir', '/home/jrm/proj/vc2016b/S-T-trn', 'data dir')
+    'datadir', '/home/jrm/proj/vc2016b/TR_log_SP_Z_LT8000', 'data dir')
+
 tf.app.flags.DEFINE_string(
     'architecture', 'architecture.json', 'network architecture')
 tf.app.flags.DEFINE_string(
@@ -71,7 +74,7 @@ def load(saver, sess, logdir):
             .split('-')[-1])
         print('  Global step was: {}'.format(global_step))
         print('  Restoring...', end='')
-        saver.restore(sess, ckp.model_checkpoint_path)
+        saver.restore(sess, ckpt.model_checkpoint_path)
         print('  Done.')
         return global_step
     else:
@@ -230,8 +233,6 @@ def main():
                     'step_{:04d}'.format(step))
                 # J: I didn't use the timeline.
             else:
-                # summary, loss_value, _ = sess.run(
-                #     [summaries, losses['all'], optim])
                 summary, loss_value, kld, logp, _ = sess.run(
                     [summaries, losses['all'], losses['D_KL'], losses['log_p'], optim])
                 writer.add_summary(summary, step)
@@ -239,8 +240,10 @@ def main():
             duration = time.time() - start_time
             print('step {:d}: D_KL = {:f}, log(p) = {:f}, ({:.3f} sec/step)'
                   .format(step, kld, logp, duration))
-            # print('step {:d}: loss = {:f}, ({:.3f} sec/step)'
-            #       .format(step, loss_value, duration))
+
+            # if step % FLAGS.checkpoint_every == 0:
+            #     save(saver, sess, logdir, step)
+            #     last_saved_step = step
 
     except KeyboardInterrupt:
         print()

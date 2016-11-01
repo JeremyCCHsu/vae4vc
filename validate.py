@@ -101,10 +101,13 @@ def main():
     # file_indices = range(150, 163)
 
     src_spk = 'SF1'
-    trg_spk = 'TM3'
-    trg_id = 9
+    trg_spk = 'TF2'
+    trg_id = 7
+    test_sentences = range(150, 163)
+    mcds = np.zeros((len(test_sentences),))
+    num_frame = np.zeros((len(test_sentences),))
 
-    for i in range(150, 155):
+    for i in test_sentences:
         src_file = os.path.join(
             FLAGS.datadir,'{}/{:6d}.mat'.format(src_spk, 100000 + i))
         trg_file = os.path.join(
@@ -140,9 +143,16 @@ def main():
         mcd_after = evaluator.mmcd(xh, x_trg)
         mcd_before = evaluator.mmcd(x_src, x_trg)
         print('{:.2f} -> {:.2f}'.format(mcd_before, mcd_after))
+        mcds[i - test_sentences[0]] = mcd_after
+        num_frame[i - test_sentences[0]] = x_src.shape[0]
+
+        # mcd.append([mcd_after, x_src.shape[0]])
 
         # Note:
         # 1. Note it's "log10" (so how to compute MCD?)
+    mcds = num_frame * mcds 
+    mcds = mcds.sum() / num_frame.sum()
+    print('Mean MCD: {:.2f}'.format(mcds))
 
 if __name__ == '__main__':
     main()

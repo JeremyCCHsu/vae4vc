@@ -3,10 +3,10 @@
 	"n_y": 10,
 	"n_z": 64,
 	"encoder": {
-		"hidden": [500, 500]
+		"hidden": [512, 512]
 	},
 	"decoder": {
-		"hidden": [500, 500]
+		"hidden": [512, 512]
 	}
 
 }

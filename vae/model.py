@@ -100,10 +100,11 @@ def SamplingLayer(
         std = tf.exp(log_var)
         std = tf.sqrt(std)
         # std = tf.expand_dims(std, 0)
-        new_shape = mu.get_shape().as_list()
+        # new_shape = mu.get_shape().as_list()
         # new_shape[0] = n_sample
+        shape = tf.shape(mu)
         eps = tf.random_normal(
-            shape=new_shape, mean=0.0, stddev=1.0, name='eps')
+            shape=shape, mean=0.0, stddev=1.0, name='eps')
         eps = tf.mul(std, eps)
         eps = tf.add(mu, eps)
         return eps
@@ -161,11 +162,41 @@ class VAE2(object):
                         + nwk_arch[net]['hidden'] \
                         + [nwk_arch['n_z']]
                 else:
-                    n_nodes = [nwk_arch['n_z'] + nwk_arch['n_y']] \
+                    n_nodes = [nwk_arch[net]['hidden'][0]] \
                         + nwk_arch[net]['hidden'] \
                         + [nwk_arch['n_x']]
 
                 with tf.variable_scope(net):
+                    if net == 'decoder':
+                        with tf.variable_scope('y_to_zy'):
+                            shape = [nwk_arch['n_y'], n_nodes[1]]
+                            w = tf.Variable(glorot_init(shape), name='weight')
+                            b = tf.Variable(
+                                tf.zeros((shape[1])), name='bias')
+                            var[net]['y_to_zy'] = {'weight': w, 'bias': b}
+
+                        with tf.variable_scope('z_to_zy'):
+                            shape = [nwk_arch['n_z'], n_nodes[1]]
+                            w = tf.Variable(glorot_init(shape), name='weight')
+                            b = tf.Variable(
+                                tf.zeros((shape[1])), name='bias')
+                            var[net]['z_to_zy'] = {'weight': w, 'bias': b}
+
+                        with tf.variable_scope('y_to_zy_gate'):
+                            shape = [nwk_arch['n_y'], n_nodes[1]]
+                            w = tf.Variable(glorot_init(shape), name='weight')
+                            b = tf.Variable(
+                                tf.zeros((shape[1])), name='bias')
+                            var[net]['y_to_zy_gate'] = {'weight': w, 'bias': b}
+
+                        with tf.variable_scope('z_to_zy_gate'):
+                            shape = [nwk_arch['n_z'], n_nodes[1]]
+                            w = tf.Variable(glorot_init(shape), name='weight')
+                            b = tf.Variable(
+                                tf.zeros((shape[1])), name='bias')
+                            var[net]['z_to_zy_gate'] = {'weight': w, 'bias': b}
+
+
                     for i, _ in enumerate(n_nodes[1: -1]):
                         layer = 'hidden{}'.format(i + 1)
                         shape = (n_nodes[i], n_nodes[i + 1])
@@ -186,6 +217,9 @@ class VAE2(object):
                         w = tf.Variable(glorot_init(shape), name='weight')
                         b = tf.Variable(tf.zeros((n_nodes[-1])), name='bias')
                         var[net]['out_lv'] = {'weight': w, 'bias': b}
+
+                    
+
         return var
 
     # def _f_uv(self, name, givens):
@@ -209,24 +243,24 @@ class VAE2(object):
         # print(self.variables)
         # for k in self.variables:
         #     print(k, self.variables[k])
-        with tf.name_scope('vae'):
-            with tf.name_scope(net):
-                for i, _ in enumerate(n_nodes[1: -1]):
-                    layer = 'hidden{}'.format(i + 1)
-                    with tf.name_scope(layer):
-                        w = var[net][layer]['weight']
-                        b = var[net][layer]['bias']
-                        # print(w, b, x)
-                        # print(w.get_shape())
-                        x = tf.nn.relu(tf.add(tf.matmul(x, w), b))
-                with tf.name_scope('out_mu'):
-                    w = var[net]['out_mu']['weight']
-                    b = var[net]['out_mu']['bias']
-                    z_mu = tf.add(tf.matmul(x, w), b)
-                with tf.name_scope('out_lv'):
-                    w = var[net]['out_mu']['weight']
-                    b = var[net]['out_mu']['bias']
-                    z_lv = tf.add(tf.matmul(x, w), b)
+        # with tf.name_scope('vae'):
+        with tf.name_scope(net):
+            for i, _ in enumerate(n_nodes[1: -1]):
+                layer = 'hidden{}'.format(i + 1)
+                with tf.name_scope(layer):
+                    w = var[net][layer]['weight']
+                    b = var[net][layer]['bias']
+                    # print(w, b, x)
+                    # print(w.get_shape())
+                    x = tf.nn.relu(tf.add(tf.matmul(x, w), b))
+            with tf.name_scope('out_mu'):
+                w = var[net]['out_mu']['weight']
+                b = var[net]['out_mu']['bias']
+                z_mu = tf.add(tf.matmul(x, w), b)
+            with tf.name_scope('out_lv'):
+                w = var[net]['out_mu']['weight']
+                b = var[net]['out_mu']['bias']
+                z_lv = tf.add(tf.matmul(x, w), b)
         return z_mu, z_lv
 
     def encode(self, x):
@@ -240,30 +274,59 @@ class VAE2(object):
     def _decode(self, z, y):
         var = self.variables
         net = 'decoder'
-        n_nodes = [self.architecture['n_z'] + self.architecture['n_y']] \
+        n_nodes = [self.architecture[net]['hidden'][0]] \
             + self.architecture[net]['hidden'] \
             + [self.architecture['n_x']]
-        with tf.variable_scope('vae'):
-            with tf.variable_scope(net):
-                # print(y.get_shape(), z.get_shape())
-                x = tf.concat(1, [z, y])
-                for i, _ in enumerate(n_nodes[1: -1]):
-                    layer = 'hidden{}'.format(i + 1)
-                    with tf.variable_scope(layer):
-                        w = var[net][layer]['weight']
-                        b = var[net][layer]['bias']
-                        x = tf.nn.relu(tf.add(tf.matmul(x, w), b))
-                with tf.name_scope('out_mu'):
-                    w = var[net]['out_mu']['weight']
-                    b = var[net]['out_mu']['bias']
-                    z_mu = tf.add(tf.matmul(x, w), b)
-                with tf.name_scope('out_lv'):
-                    w = var[net]['out_mu']['weight']
-                    b = var[net]['out_mu']['bias']
-                    z_lv = tf.add(tf.matmul(x, w), b)
+        # with tf.variable_scope('vae'):
+        with tf.name_scope(net):
+            # print(y.get_shape(), z.get_shape())
+            
+            # x = tf.concat(1, [z, y])
+            with tf.name_scope('z_to_zy'):
+                w = var[net]['z_to_zy']['weight']
+                b = var[net]['z_to_zy']['bias']
+                z_to_zy = tf.add(tf.matmul(z, w), b)
 
-                    # [TODO] Variance disabled.
-                    z_lv = tf.zeros(tf.shape(z_lv))
+            with tf.name_scope('y_to_zy'):
+                w = var[net]['y_to_zy']['weight']
+                b = var[net]['y_to_zy']['bias']
+                y_to_zy = tf.add(tf.matmul(y, w), b)
+
+            # x = tf.nn.relu(tf.add(y_to_zy, z_to_zy))
+            
+            x = tf.nn.tanh(tf.add(y_to_zy, z_to_zy))
+
+            with tf.name_scope('z_to_zy_gate'):
+                w = var[net]['z_to_zy_gate']['weight']
+                b = var[net]['z_to_zy_gate']['bias']
+                z_to_zy_gate = tf.add(tf.matmul(z, w), b)
+
+            with tf.name_scope('y_to_zy_gate'):
+                w = var[net]['y_to_zy_gate']['weight']
+                b = var[net]['y_to_zy_gate']['bias']
+                y_to_zy_gate = tf.add(tf.matmul(y, w), b)
+
+            gate = tf.nn.sigmoid(tf.add(z_to_zy_gate, y_to_zy_gate))
+
+            x = tf.mul(x, gate)
+
+            for i, _ in enumerate(n_nodes[1: -1]):
+                layer = 'hidden{}'.format(i + 1)
+                with tf.name_scope(layer):
+                    w = var[net][layer]['weight']
+                    b = var[net][layer]['bias']
+                    x = tf.nn.relu(tf.add(tf.matmul(x, w), b))
+            with tf.name_scope('out_mu'):
+                w = var[net]['out_mu']['weight']
+                b = var[net]['out_mu']['bias']
+                z_mu = tf.add(tf.matmul(x, w), b)
+            with tf.name_scope('out_lv'):
+                w = var[net]['out_mu']['weight']
+                b = var[net]['out_mu']['bias']
+                z_lv = tf.add(tf.matmul(x, w), b)
+
+                # [TODO] Variance disabled.
+                z_lv = tf.zeros(tf.shape(z_lv))
         return z_mu, z_lv
 
     def _compute_latent_objective(self, z_mu, z_lv):
