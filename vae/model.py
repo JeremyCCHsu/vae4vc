@@ -25,6 +25,12 @@ def create_bias(name, shape):
     return tf.Variable(initializer(shape=shape), name)
 
 
+def create_weight_and_bias(shape):
+    w = create_weight('weight', shape)
+    b = create_bias('bias', [shape[-1]])
+    return w, b
+
+
 def glorot_init(shape, constant=1):
     """
     Initialization of network weights using Xavier Glorot's proposal
@@ -88,6 +94,34 @@ def MLP(var_list, fan_out, nonlinear=tf.nn.relu, is_training=False):
 #         eps = tf.add(mu, eps)
 #         return eps
 
+def mlp_to_mu_lv(x, shapes, name, reuse=True):
+    with tf.variable_scope(name, reuse=reuse):
+        for i in range(len(shapes) -2):
+            with tf.variable_scope('layer{:d}'.format(i)):
+                w = create_variable(
+                    name='weight',
+                    shape=shapes[i: i + 2])
+                b = create_bias_variable(
+                    name='bias',
+                    shape=[shapes[i + 1]])
+                x = tf.nn.relu(tf.add(tf.matmul(x, w), b))
+        with tf.variable_scope('out_mu'):
+            w = create_variable(
+                name='weight',
+                shape=shapes[-2:])
+            b = create_bias_variable(
+                name='bias',
+                shape=[shapes[-1]])
+            mu = tf.add(tf.matmul(x, w), b)
+        with tf.variable_scope('out_lv'):
+            w = create_variable(
+                name='weight',
+                shape=shapes[-2:])
+            b = create_bias_variable(
+                name='bias',
+                shape=[shapes[-1]])
+            lv = tf.add(tf.matmul(x, w), b)
+    return mu, lv
 
 def SamplingLayer(
         mu,
@@ -142,126 +176,174 @@ class VAE2(object):
             batch_size,
             architecture):
         self.batch_size = batch_size
-        self.architecture = architecture
+        # self.architecture = architecture
+
+        self.architecture = self._make_architecture(architecture)
 
         # Enclose all variables in a nested dictionary
         self.variables = self._create_all_variables()
 
     # def _create_network(self, x, n_inputs, n_outputs, name):
+    def _make_architecture(self, nwk_arch):
+        n_zy = nwk_arch['n_z'] + nwk_arch['n_y']
+        enc_nwk = [nwk_arch['n_x']] + nwk_arch['encoder']['hidden'] + [nwk_arch['n_z']]
+        dec_nwk = [n_zy] + nwk_arch['encoder']['hidden'] + [nwk_arch['n_x']]
+        ver_nwk = [nwk_arch['n_x']] + nwk_arch['discriminator']['hidden'] + [nwk_arch['n_d']]
+        rec_nwk = [nwk_arch['n_x']] + nwk_arch['recognizer']['hidden'] + [nwk_arch['n_y']]
+        return dict(
+            encoder=enc_nwk,
+            decoder=dec_nwk,
+            discriminator=ver_nwk,
+            recognizer=rec_nwk,
+            n_y=nwk_arch['n_y'])
+
 
     def _create_all_variables(self):
         nwk_arch = self.architecture
         var = dict()
         with tf.variable_scope('vae'):
-
-            # var['encoder'] = dict()
-            for net in ('encoder', 'decoder'):
+            for net in ['encoder', 'decoder', 'discriminator', 'recognizer']:
                 var[net] = dict()
-                if net == 'encoder':
-                    n_nodes = [nwk_arch['n_x']] \
-                        + nwk_arch[net]['hidden'] \
-                        + [nwk_arch['n_z']]
-                else:
-                    n_nodes = [nwk_arch[net]['hidden'][0]] \
-                        + nwk_arch[net]['hidden'] \
-                        + [nwk_arch['n_x']]
+                if net == 'decoder':
+                    n_z = nwk_arch['encoder'][-1]
+                    n_y = nwk_arch['n_y']
+                    n_zy = n_z + n_y
+                    scope = 'z_to_zy'
+                    with tf.variable_scope(scope):
+                        # print(scope, scope.name)
+                        w, b = create_weight_and_bias([n_z, n_zy])
+                        var[net][scope] = {'weight': w, 'bias': b}
 
+                    scope = 'y_to_zy'
+                    with tf.variable_scope(scope):
+                        w, b = create_weight_and_bias([n_y, n_zy])
+                        var[net][scope] = {'weight': w, 'bias': b}
+                
                 with tf.variable_scope(net):
-                    if net == 'decoder':
-                        with tf.variable_scope('y_to_zy'):
-                            shape = [nwk_arch['n_y'], n_nodes[1]]
-                            w = tf.Variable(glorot_init(shape), name='weight')
-                            b = tf.Variable(
-                                tf.zeros((shape[1])), name='bias')
-                            var[net]['y_to_zy'] = {'weight': w, 'bias': b}
-
-                        with tf.variable_scope('z_to_zy'):
-                            shape = [nwk_arch['n_z'], n_nodes[1]]
-                            w = tf.Variable(glorot_init(shape), name='weight')
-                            b = tf.Variable(
-                                tf.zeros((shape[1])), name='bias')
-                            var[net]['z_to_zy'] = {'weight': w, 'bias': b}
-
-                        with tf.variable_scope('y_to_zy_gate'):
-                            shape = [nwk_arch['n_y'], n_nodes[1]]
-                            w = tf.Variable(glorot_init(shape), name='weight')
-                            b = tf.Variable(
-                                tf.zeros((shape[1])), name='bias')
-                            var[net]['y_to_zy_gate'] = {'weight': w, 'bias': b}
-
-                        with tf.variable_scope('z_to_zy_gate'):
-                            shape = [nwk_arch['n_z'], n_nodes[1]]
-                            w = tf.Variable(glorot_init(shape), name='weight')
-                            b = tf.Variable(
-                                tf.zeros((shape[1])), name='bias')
-                            var[net]['z_to_zy_gate'] = {'weight': w, 'bias': b}
-
-
-                    for i, _ in enumerate(n_nodes[1: -1]):
-                        layer = 'hidden{}'.format(i + 1)
-                        shape = (n_nodes[i], n_nodes[i + 1])
-                        # print(shape)
+                    shapes = self.architecture[net]
+                    print(net, shapes)
+                    for i in range(len(shapes) -2):
+                        layer = 'hidden{:d}'.format(i)
                         with tf.variable_scope(layer):
-                            w = tf.Variable(glorot_init(shape), name='weight')
-                            b = tf.Variable(
-                                tf.zeros((n_nodes[i + 1])), name='bias')
+                            shape = shapes[i: i + 2]
+                            w, b = create_weight_and_bias(shape)
                             var[net][layer] = {'weight': w, 'bias': b}
 
-                    shape = n_nodes[-2:]
-                    with tf.variable_scope('out_mu'):
-                        w = tf.Variable(glorot_init(shape), name='weight')
-                        b = tf.Variable(tf.zeros((n_nodes[-1])), name='bias')
-                        var[net]['out_mu'] = {'weight': w, 'bias': b}
-
-                    with tf.variable_scope('out_lv'):
-                        w = tf.Variable(glorot_init(shape), name='weight')
-                        b = tf.Variable(tf.zeros((n_nodes[-1])), name='bias')
-                        var[net]['out_lv'] = {'weight': w, 'bias': b}
-
-                    
-
+                    for out in ('out_mu', 'out_lv'):
+                        with tf.variable_scope(out):
+                            w, b = create_weight_and_bias(shapes[-2:])
+                            var[net][out] = {'weight': w, 'bias': b}
         return var
 
-    # def _f_uv(self, name, givens):
-    #     with tf.variable_scope(name) as scope:
-    #         n_s = self.architecture[name]['out']
-    #         s0 = MLP(givens, self.architecture[name]['hidden'])
-    #         s_mu = DenseLayer(s0, n_s, 'mu', tf.identity)
-    #         s_log_var = DenseLayer(s0, n_s, 'log_var', tf.identity)
-    #         # s_log_var = BoundLayer(
-    #         #     s_log_var, LOG_VAR_FLOOR, LOG_VAR_FLOOR_lOWER)
-    #     return s_mu, s_log_var
-
     # [TODO] _encoder and _decoder share a lot of similarity!
+    # [TODO] enc and dis can be written as the same!
     def _encode(self, x):
         var = self.variables
         net = 'encoder'
-        n_nodes = [self.architecture['n_x']] \
-            + self.architecture[net]['hidden'] \
-            + [self.architecture['n_z']]
-        # print(n_nodes)
-        # print(self.variables)
-        # for k in self.variables:
-        #     print(k, self.variables[k])
-        # with tf.name_scope('vae'):
+        n_nodes = self.architecture[net]
+
         with tf.name_scope(net):
-            for i, _ in enumerate(n_nodes[1: -1]):
-                layer = 'hidden{}'.format(i + 1)
+            for i in range(len(n_nodes) -2):
+                layer = 'hidden{:d}'.format(i)
                 with tf.name_scope(layer):
                     w = var[net][layer]['weight']
                     b = var[net][layer]['bias']
-                    # print(w, b, x)
-                    # print(w.get_shape())
                     x = tf.nn.relu(tf.add(tf.matmul(x, w), b))
-            with tf.name_scope('out_mu'):
-                w = var[net]['out_mu']['weight']
-                b = var[net]['out_mu']['bias']
-                z_mu = tf.add(tf.matmul(x, w), b)
-            with tf.name_scope('out_lv'):
-                w = var[net]['out_mu']['weight']
-                b = var[net]['out_mu']['bias']
-                z_lv = tf.add(tf.matmul(x, w), b)
-        return z_mu, z_lv
+
+            outputs = list()
+            for out in ['out_mu', 'out_lv']:
+                with tf.name_scope(out):
+                    w = var[net][out]['weight']
+                    b = var[net][out]['bias']
+                    y = tf.add(tf.matmul(x, w), b)
+                    outputs.append(y)
+        return tuple(outputs)
+
+    def _decode(self, z, y):
+        var = self.variables
+        net = 'decoder'
+        n_nodes = self.architecture[net]
+
+        scope = 'z_to_zy'
+        with tf.name_scope('z_to_zy'):
+            w = var[net][scope]['weight']
+            b = var[net][scope]['bias']
+            z_to_zy = tf.matmul(z, w)
+
+        scope = 'y_to_zy'
+        with tf.name_scope('y_to_zy'):
+            w = var[net][scope]['weight']
+            b = var[net][scope]['bias']
+            y_to_zy = tf.add(tf.matmul(y, w), b)
+
+        x = y_to_zy + z_to_zy
+        with tf.name_scope(net):
+            for i in range(len(n_nodes) -2):
+                layer = 'hidden{:d}'.format(i)
+                with tf.name_scope(layer):
+                    w = var[net][layer]['weight']
+                    b = var[net][layer]['bias']
+                    x = tf.nn.relu(tf.add(tf.matmul(x, w), b))
+                    
+            outputs = list()
+            for out in ['out_mu', 'out_lv']:
+                with tf.name_scope(out):
+                    w = var[net][out]['weight']
+                    b = var[net][out]['bias']
+                    y = tf.add(tf.matmul(x, w), b)
+                    outputs.append(y)
+        return tuple(outputs)
+
+    def _verify(self, x):
+        var = self.variables
+        net = 'discriminator'
+        n_nodes = self.architecture[net]
+
+        with tf.name_scope(net):
+            for i in range(len(n_nodes) -2):
+                layer = 'hidden{:d}'.format(i)
+                with tf.name_scope(layer):
+                    w = var[net][layer]['weight']
+                    b = var[net][layer]['bias']
+                    x = tf.nn.relu(tf.add(tf.matmul(x, w), b))
+
+            # outputs = list()
+            # for out in 'out_mu', 'out_lv']:
+            # with tf.name_scope(out):
+            scope = 'out_mu'
+            with tf.name_scope(scope):
+                w = var[net][scope]['weight']
+                b = var[net][scope]['bias']
+                y = tf.nn.softmax(tf.add(tf.matmul(x, w), b))
+
+        #             outputs.append(y)
+        # return tuple(outputs)
+        return y
+
+
+    def _recognize(self, x):
+        var = self.variables
+        net = 'recognizer'
+        n_nodes = self.architecture[net]
+
+        with tf.name_scope(net):
+            for i in range(len(n_nodes) -2):
+                layer = 'hidden{:d}'.format(i)
+                with tf.name_scope(layer):
+                    w = var[net][layer]['weight']
+                    b = var[net][layer]['bias']
+                    x = tf.nn.relu(tf.add(tf.matmul(x, w), b))
+
+            # outputs = list()
+            # for out in 'out_mu', 'out_lv']:
+            # with tf.name_scope(out):
+            scope = 'out_mu'
+            with tf.name_scope(scope):
+                w = var[net][scope]['weight']
+                b = var[net][scope]['bias']
+                y = tf.nn.softmax(tf.add(tf.matmul(x, w), b))
+        return y
+
 
     def encode(self, x):
         z_mu, _ = self._encode(x)
@@ -270,64 +352,6 @@ class VAE2(object):
     def decode(self, z, y):
         xh_mu, _ = self._decode(z, y)
         return xh_mu
-
-    def _decode(self, z, y):
-        var = self.variables
-        net = 'decoder'
-        n_nodes = [self.architecture[net]['hidden'][0]] \
-            + self.architecture[net]['hidden'] \
-            + [self.architecture['n_x']]
-        # with tf.variable_scope('vae'):
-        with tf.name_scope(net):
-            # print(y.get_shape(), z.get_shape())
-            
-            # x = tf.concat(1, [z, y])
-            with tf.name_scope('z_to_zy'):
-                w = var[net]['z_to_zy']['weight']
-                b = var[net]['z_to_zy']['bias']
-                z_to_zy = tf.add(tf.matmul(z, w), b)
-
-            with tf.name_scope('y_to_zy'):
-                w = var[net]['y_to_zy']['weight']
-                b = var[net]['y_to_zy']['bias']
-                y_to_zy = tf.add(tf.matmul(y, w), b)
-
-            # x = tf.nn.relu(tf.add(y_to_zy, z_to_zy))
-            
-            x = tf.nn.tanh(tf.add(y_to_zy, z_to_zy))
-
-            with tf.name_scope('z_to_zy_gate'):
-                w = var[net]['z_to_zy_gate']['weight']
-                b = var[net]['z_to_zy_gate']['bias']
-                z_to_zy_gate = tf.add(tf.matmul(z, w), b)
-
-            with tf.name_scope('y_to_zy_gate'):
-                w = var[net]['y_to_zy_gate']['weight']
-                b = var[net]['y_to_zy_gate']['bias']
-                y_to_zy_gate = tf.add(tf.matmul(y, w), b)
-
-            gate = tf.nn.sigmoid(tf.add(z_to_zy_gate, y_to_zy_gate))
-
-            x = tf.mul(x, gate)
-
-            for i, _ in enumerate(n_nodes[1: -1]):
-                layer = 'hidden{}'.format(i + 1)
-                with tf.name_scope(layer):
-                    w = var[net][layer]['weight']
-                    b = var[net][layer]['bias']
-                    x = tf.nn.relu(tf.add(tf.matmul(x, w), b))
-            with tf.name_scope('out_mu'):
-                w = var[net]['out_mu']['weight']
-                b = var[net]['out_mu']['bias']
-                z_mu = tf.add(tf.matmul(x, w), b)
-            with tf.name_scope('out_lv'):
-                w = var[net]['out_mu']['weight']
-                b = var[net]['out_mu']['bias']
-                z_lv = tf.add(tf.matmul(x, w), b)
-
-                # [TODO] Variance disabled.
-                z_lv = tf.zeros(tf.shape(z_lv))
-        return z_mu, z_lv
 
     def _compute_latent_objective(self, z_mu, z_lv):
         with tf.name_scope('latent_loss'):
@@ -345,6 +369,7 @@ class VAE2(object):
             z_mu, z_lv = self._encode(x)
             z = SamplingLayer(z_mu, z_lv)
             xh_mu, xh_lv = self._decode(z, y)
+            xh_lv = tf.zeros(tf.shape(xh_lv))
 
             with tf.name_scope('loss'):
                 latent_loss = self._compute_latent_objective(z_mu, z_lv)
@@ -354,22 +379,68 @@ class VAE2(object):
                 loss = - tf.reduce_mean(reconstr_loss - latent_loss)
                 tf.scalar_summary('loss', loss)
 
+
+                c = self._recognize(xh_mu)
+                ylogc = tf.mul(y, tf.log(c + EPSILON))
+                ylogc = tf.reduce_sum(ylogc, -1)
+
+                c_true = self._recognize(x)
+                ylogc_true = tf.mul(y, tf.log(c_true + EPSILON))
+                ylogc_true = tf.reduce_sum(ylogc_true)
+
+                # L_I = Ex Ec log Q[c|x]   + H(c)
+
+
+                with tf.name_scope('noise'):
+                    noise1 = tf.random_normal(tf.shape(x), 0., 2.)
+                    noise2 = tf.random_normal(tf.shape(xh_mu), 0., 2.)
+
+                # [TODO] This means that I SPECIFY the first dimension to be the judged TRUTH
+                pT = self._verify(x + noise1)
+                pF = self._verify(xh_mu + noise2)
+
+                pTT = pT[:, 0]
+                pFT = pT[:, 1]  # judge=F, truth=T
+                pFF = pF[:, 1]
+                pTF = pF[:, 0]
+
+                log_pTT = tf.log(pTT + EPSILON)
+                logpFF = tf.log(pFF + EPSILON)
+
+                discriminator_loss = - (log_pTT + logpFF)
+                
+                # generator_loss = - tf.log(1. - pFF + EPSILON)
+                generator_loss = - tf.log(pTF + EPSILON)
+
                 losses = dict()
                 losses['all'] = loss
                 losses['D_KL'] = tf.reduce_mean(latent_loss)
                 losses['log_p'] = tf.reduce_mean(reconstr_loss)
+                losses['p_t_t'] = tf.reduce_mean(log_pTT)
+                losses['p_f_f'] = tf.reduce_mean(logpFF)
+                losses['gan_d'] = tf.reduce_mean(discriminator_loss)
+                losses['gan_g'] = tf.reduce_mean(generator_loss)
+                losses['info'] = tf.reduce_mean(ylogc + ylogc_true)
+                # losses['info_true'] = tf.reduce_mean(ylogc_true)
 
                 if l2_regularization is None or l2_regularization is 0.0:
                     # return loss
-                    return losses
+                    # return losses
                 else:
                     l2_loss = tf.add_n([
                         tf.nn.l2_loss(v) for v in tf.trainable_variables()
                         if not('bias' in v.name)])
 
-                    total_loss = loss + l2_loss * l2_regularization
-                    tf.scalar_summary('l2_loss', l2_loss)
-                    tf.scalar_summary('total_loss', total_loss)
+                    losses['l2_r'] = l2_loss * l2_regularization
+                    losses['all'] = loss + losses['l2_r']
+                    # total_loss = loss + losses['l2_r']
+                    # losses['all'] = total_loss
+                    # tf.scalar_summary('l2_loss', l2_loss)
+                    # tf.scalar_summary('total_loss', total_loss)
+                    # tf.scalar_summary('loss_d', losses['gan_d'])
+                    # tf.scalar_summary('loss_g', losses['gan_g'])
+                for v in losses:
+                    tf.scalar_summary('loss_{}'.format(v), losses[v])
                     # return total_loss
-                    losses['all'] = total_loss
-                    return losses
+
+                return losses

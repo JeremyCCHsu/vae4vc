@@ -2,10 +2,17 @@
 	"n_x": 513,
 	"n_y": 10,
 	"n_z": 64,
+	"n_d": 2,
 	"encoder": {
 		"hidden": [512, 512]
 	},
 	"decoder": {
+		"hidden": [512, 512]
+	},
+	"discriminator": {
+		"hidden": [512, 512]
+	},
+	"recognizer": {
 		"hidden": [512, 512]
 	}
 

@@ -100,9 +100,13 @@ def main():
 
     # file_indices = range(150, 163)
 
-    src_spk = 'SF1'
-    trg_spk = 'TF2'
-    trg_id = 7
+    speakers = ['SF1', 'SF2', 'SF3', 'SM1', 'SM2', 'TF1', 'TF2', 'TM1', 'TM2', 'TM3']
+    # src_spk = 'SF1'
+    # trg_spk = 'TM3'
+    src_id = 0
+    trg_id = 9
+    src_spk = speakers[src_id]
+    trg_spk = speakers[trg_id]
     test_sentences = range(150, 163)
     mcds = np.zeros((len(test_sentences),))
     num_frame = np.zeros((len(test_sentences),))

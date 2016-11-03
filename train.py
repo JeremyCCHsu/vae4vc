@@ -4,6 +4,7 @@ import time
 import json
 
 import tensorflow as tf
+import numpy as np
 
 from datetime import datetime
 from vae.model import VAE2
@@ -47,6 +48,10 @@ tf.app.flags.DEFINE_float('lr', 1e-3, 'learning rate')
 tf.app.flags.DEFINE_integer('num_steps', 10000, 'num of steps (frames)')
 tf.app.flags.DEFINE_string(
     'file_filter', '.*\.bin', 'filename filter')
+
+# [MAKESHIFT][TODO]
+tf.app.flags.DEFINE_integer('step_gan', 2000, 'num of steps before GAN')
+
 
 def save(saver, sess, logdir, step):
     model_name = 'model.ckpt'
@@ -175,13 +180,54 @@ def main():
 
     net = VAE2(
         batch_size=FLAGS.batch_size,
-        architecture=architecture)
+        # x, y,
+        architecture=architecture,
+        # l2_regularization=FLAGS.l2_regularization)
+        )
 
     # Loss and Optimizer
-    losses = net.loss(x, y, FLAGS.l2_regularization)
-    optimizer = tf.train.AdamOptimizer(learning_rate=FLAGS.lr)
+    # losses = net.get_losses()
+    losses = net.loss(x, y, l2_regularization=FLAGS.l2_regularization)
     trainable = tf.trainable_variables()
-    optim = optimizer.minimize(losses['all'], var_list=trainable)
+
+    # [TODO] I disabled encoder update
+    d_vars = [var for var in trainable if 'discriminator' in var.name]
+    # print('Discriminator')
+    # for v in d_vars:
+    #     print(v.name)
+
+    # print('Generator')
+    g_vars = [var for var in trainable \
+        if 'encoder' in var.name or 'decoder' in var.name \
+        # and 'encoder' not in var.name
+        ]
+    # for v in g_vars:
+    #     print(v.name)
+
+    # optimizer = tf.train.AdamOptimizer(learning_rate=FLAGS.lr)    
+    # optim = optimizer.minimize(losses['all'], var_list=trainable)
+    optimizer = tf.train.AdamOptimizer(learning_rate=FLAGS.lr)    
+    optim = optimizer.minimize(losses['all']+ losses['info'], var_list=trainable)
+
+    optimizer_d = tf.train.AdamOptimizer(learning_rate=FLAGS.lr, name='opt_d')
+    optim_d = optimizer_d.minimize(losses['gan_d'], var_list=d_vars)
+
+    # optimizer_d = tf.train.AdamOptimizer(learning_rate=FLAGS.lr, name='opt_d')
+    # optim_d = optimizer_d.minimize(losses['gan_d'] + losses['all'], var_list=d_vars)
+
+    # optimizer_g = tf.train.AdamOptimizer(learning_rate=FLAGS.lr, name='opt_g')
+    # optim_g = optimizer_g.minimize(losses['gan_g'] + losses['D_KL'], var_list=g_vars)
+
+    # optimizer_g = tf.train.AdamOptimizer(learning_rate=FLAGS.lr, name='opt_g')
+    # optim_g = optimizer_g.minimize(losses['gan_g'], var_list=g_vars)
+
+    optimizer_g = tf.train.AdamOptimizer(learning_rate=FLAGS.lr, name='opt_g')
+    optim_g = optimizer_g.minimize(losses['gan_g'] + losses['info'], var_list=g_vars)
+
+    # [Note] However, using this ended up with a VAE; 
+    # I guess the gradient of GAN was too small.
+    # optim_g = optimizer.minimize(losses['gan_g'] + losses['all'],
+    #     var_list=trainable)
 
     # Writer of Summary
     writer = tf.train.SummaryWriter(logdir)
@@ -219,7 +265,7 @@ def main():
         last_saved_step = saved_global_step
         for step in range(saved_global_step + 1, FLAGS.num_steps):
             start_time = time.time()
-            if step % 50 == 0:
+            if step % 50 == 0 and step < FLAGS.step_gan:
                 print('Storing metadata')
                 run_options = tf.RunOptions(
                     trace_level=tf.RunOptions.FULL_TRACE)
@@ -232,14 +278,36 @@ def main():
                     run_metadata,
                     'step_{:04d}'.format(step))
                 # J: I didn't use the timeline.
+            elif step >= FLAGS.step_gan:
+                summary, loss_d, ptt, pff, _ = sess.run(
+                    [summaries, losses['gan_d'], losses['p_t_t'], losses['p_f_f'], optim_d])
+                writer.add_summary(summary, step)
+                summary, loss_g, _ = sess.run([summaries, losses['gan_g'], optim_g])
+                writer.add_summary(summary, step)
             else:
                 summary, loss_value, kld, logp, _ = sess.run(
                     [summaries, losses['all'], losses['D_KL'], losses['log_p'], optim])
                 writer.add_summary(summary, step)
 
+
             duration = time.time() - start_time
-            print('step {:d}: D_KL = {:f}, log(p) = {:f}, ({:.3f} sec/step)'
+
+            if step < FLAGS.step_gan:
+                print('step {:d}: D_KL = {:f}, log(p) = {:f}, ({:.3f} sec/step)'
                   .format(step, kld, logp, duration))
+            else:
+                # print(ptt.shape, ptt.dtype)
+                print('step {:d}: D loss = {:.2f}, G\'s fooling ability = {:.2f}%, '
+                    'P(T|T) = {:.2f}%, P(F|F) = {:.2f}%, ({:.3f} sec/step)'
+                    .format(
+                        step,
+                        loss_d,
+                        np.exp(-loss_g) * 100.,
+                        np.exp(ptt) * 100.,
+                        np.exp(pff) * 100.,
+                        duration)
+                )
+
 
             # if step % FLAGS.checkpoint_every == 0:
             #     save(saver, sess, logdir, step)
