@@ -119,7 +119,7 @@ def main():
 
             z = sess.run(z_, feed_dict={x_: x_source})
             xh = sess.run(xh_, feed_dict={z_: z, y_: y_source})
-
+            # pdb.set_trace()
             x_all.append(x_source)
             z_all.append(z)
             xh_all.append(xh)
@@ -130,19 +130,25 @@ def main():
         idx = [v for k, v in idx]
         for i in range(10):
             plt.figure()
-            plt.subplot(411)
+            plt.subplot(511)
             plt.imshow(np.flipud(x_all[i].T), aspect='auto')
             plt.subplots_adjust(hspace=0.001)
-            plt.subplot(412)
+            plt.subplot(512)
             plt.imshow(z_all[i][:, idx].T)
             plt.subplots_adjust(hspace=0.001)
             tmp = z_all[i][:, idx]
-            plt.subplot(414)
+            plt.subplot(514)
             plt.plot(tmp[:, -8:])
             plt.xlim([0, tmp.shape[0]])
-            plt.subplot(413)
+            plt.subplot(513)
             plt.imshow(np.flipud(xh_all[i].T), aspect='auto')
             plt.subplots_adjust(hspace=0.001)
+            
+            plt.subplot(515)
+            # pdb.set_trace()
+            plt.plot(xh_all[i][350])
+            plt.hold(True)
+            plt.plot(x_all[i][350], 'r')
             plt.savefig('test-{:s}.png'.format(names[i]))
             plt.close()
             

@@ -38,6 +38,9 @@ tf.app.flags.DEFINE_float('l2_regularization', 0.0, 'L2 regularization')
 tf.app.flags.DEFINE_float('lr', 1e-3, 'learning rate')
 tf.app.flags.DEFINE_integer('num_steps', 10000, 'num of steps (frames)')
 
+tf.app.flags.DEFINE_integer('source_id', 0, 'target id (SF1 = 1, TM3 = 9)')
+tf.app.flags.DEFINE_integer('target_id', 9, 'target id (SF1 = 1, TM3 = 9)')
+
 tf.app.flags.DEFINE_string(
     'file_filter', '.*\.bin', 'filename filter')
 
@@ -103,8 +106,8 @@ def main():
     speakers = ['SF1', 'SF2', 'SF3', 'SM1', 'SM2', 'TF1', 'TF2', 'TM1', 'TM2', 'TM3']
     # src_spk = 'SF1'
     # trg_spk = 'TM3'
-    src_id = 0
-    trg_id = 9
+    src_id = FLAGS.source_id
+    trg_id = FLAGS.target_id
     src_spk = speakers[src_id]
     trg_spk = speakers[trg_id]
     test_sentences = range(150, 163)

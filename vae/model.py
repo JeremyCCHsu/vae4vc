@@ -326,7 +326,8 @@ class VAE2(object):
         net = 'recognizer'
         n_nodes = self.architecture[net]
 
-        with tf.name_scope(net):
+        net = 'discriminator'
+        with tf.name_scope('recoginzer'):
             for i in range(len(n_nodes) -2):
                 layer = 'hidden{:d}'.format(i)
                 with tf.name_scope(layer):
@@ -339,8 +340,8 @@ class VAE2(object):
             # with tf.name_scope(out):
             scope = 'out_mu'
             with tf.name_scope(scope):
-                w = var[net][scope]['weight']
-                b = var[net][scope]['bias']
+                w = var['recognizer'][scope]['weight']
+                b = var['recognizer'][scope]['bias']
                 y = tf.nn.softmax(tf.add(tf.matmul(x, w), b))
         return y
 
@@ -371,6 +372,9 @@ class VAE2(object):
             xh_mu, xh_lv = self._decode(z, y)
             xh_lv = tf.zeros(tf.shape(xh_lv))
 
+            c_F = self._recognize(xh_mu)
+            c_T = self._recognize(x)
+
             with tf.name_scope('loss'):
                 latent_loss = self._compute_latent_objective(z_mu, z_lv)
                 reconstr_loss = self._compute_visible_objective(
@@ -380,13 +384,12 @@ class VAE2(object):
                 tf.scalar_summary('loss', loss)
 
 
-                c = self._recognize(xh_mu)
-                ylogc = tf.mul(y, tf.log(c + EPSILON))
+                ylogc = tf.mul(y, tf.log(c_F + EPSILON))
                 ylogc = tf.reduce_sum(ylogc, -1)
 
-                c_true = self._recognize(x)
-                ylogc_true = tf.mul(y, tf.log(c_true + EPSILON))
-                ylogc_true = tf.reduce_sum(ylogc_true)
+
+                ylogc_true = tf.mul(y, tf.log(c_T + EPSILON))
+                ylogc_true = tf.reduce_sum(ylogc_true, -1)
 
                 # L_I = Ex Ec log Q[c|x]   + H(c)
 
@@ -396,51 +399,48 @@ class VAE2(object):
                     noise2 = tf.random_normal(tf.shape(xh_mu), 0., 2.)
 
                 # [TODO] This means that I SPECIFY the first dimension to be the judged TRUTH
-                pT = self._verify(x + noise1)
-                pF = self._verify(xh_mu + noise2)
+                pT = self._verify(x)  # + noise1)
+                pF = self._verify(xh_mu)  # + noise2)
 
                 pTT = pT[:, 0]
                 pFT = pT[:, 1]  # judge=F, truth=T
                 pFF = pF[:, 1]
                 pTF = pF[:, 0]
 
-                log_pTT = tf.log(pTT + EPSILON)
+                logpTT = tf.log(pTT + EPSILON)
                 logpFF = tf.log(pFF + EPSILON)
 
-                discriminator_loss = - (log_pTT + logpFF)
+                logpTF = tf.log(pTF + EPSILON)
+                logpFT = tf.log(pFT + EPSILON)
+
+                discriminator_loss = - (logpTT + logpFF)
                 
                 # generator_loss = - tf.log(1. - pFF + EPSILON)
-                generator_loss = - tf.log(pTF + EPSILON)
+                # generator_loss = - tf.log(pTF + EPSILON)
+                generator_loss = - (logpTF)
 
                 losses = dict()
                 losses['all'] = loss
                 losses['D_KL'] = tf.reduce_mean(latent_loss)
                 losses['log_p'] = tf.reduce_mean(reconstr_loss)
-                losses['p_t_t'] = tf.reduce_mean(log_pTT)
+                losses['p_t_t'] = tf.reduce_mean(logpTT)
                 losses['p_f_f'] = tf.reduce_mean(logpFF)
                 losses['gan_d'] = tf.reduce_mean(discriminator_loss)
                 losses['gan_g'] = tf.reduce_mean(generator_loss)
                 losses['info'] = tf.reduce_mean(ylogc + ylogc_true)
-                # losses['info_true'] = tf.reduce_mean(ylogc_true)
 
                 if l2_regularization is None or l2_regularization is 0.0:
-                    # return loss
-                    # return losses
+                    pass
+
                 else:
                     l2_loss = tf.add_n([
                         tf.nn.l2_loss(v) for v in tf.trainable_variables()
                         if not('bias' in v.name)])
 
                     losses['l2_r'] = l2_loss * l2_regularization
-                    losses['all'] = loss + losses['l2_r']
-                    # total_loss = loss + losses['l2_r']
-                    # losses['all'] = total_loss
-                    # tf.scalar_summary('l2_loss', l2_loss)
-                    # tf.scalar_summary('total_loss', total_loss)
-                    # tf.scalar_summary('loss_d', losses['gan_d'])
-                    # tf.scalar_summary('loss_g', losses['gan_g'])
+                    losses['all'] += losses['l2_r']
+
                 for v in losses:
                     tf.scalar_summary('loss_{}'.format(v), losses[v])
-                    # return total_loss
 
                 return losses

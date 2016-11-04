@@ -198,19 +198,58 @@ def main():
 
     # print('Generator')
     g_vars = [var for var in trainable \
-        if 'encoder' in var.name or 'decoder' in var.name \
+        if 'discriminator' not in var.name and 'recognizer' not in var.name \
+        # if 'encoder' in var.name or 'decoder' in var.name \
         # and 'encoder' not in var.name
         ]
+
+
+    dec_vars = [var for var in trainable if 'decoder' in var.name]
+
     # for v in g_vars:
     #     print(v.name)
+
+    r_vars = [var for var in trainable if 'recognizer' in var.name]
+
+    # Update: G(VAE+Info), D wrt GAN, R wrt Info
+
+    for varset, name in zip(
+            [g_vars, d_vars, r_vars, dec_vars], 
+            ['Generator', 'Discriminator', 'Recognizer', 'Decoder']):
+        print(name)
+        for v in varset:
+            print(v.name)
+        print()
+
+
 
     # optimizer = tf.train.AdamOptimizer(learning_rate=FLAGS.lr)    
     # optim = optimizer.minimize(losses['all'], var_list=trainable)
     optimizer = tf.train.AdamOptimizer(learning_rate=FLAGS.lr)    
-    optim = optimizer.minimize(losses['all']+ losses['info'], var_list=trainable)
+    optim = optimizer.minimize(
+        losses['all'], 
+        var_list=g_vars)
 
-    optimizer_d = tf.train.AdamOptimizer(learning_rate=FLAGS.lr, name='opt_d')
-    optim_d = optimizer_d.minimize(losses['gan_d'], var_list=d_vars)
+    optim_d1 = optimizer.minimize(
+        losses['gan_d'],
+        var_list=d_vars)
+
+    optim_r1 = optimizer.minimize(
+        -losses['info'],
+        var_list=r_vars)
+
+
+    # loss_infogan = 
+
+    # optimizer_d = tf.train.AdamOptimizer(learning_rate=FLAGS.lr, name='opt_d')
+    # optim_d = optimizer_d.minimize(
+    #     losses['gan_d'] - losses['info'], 
+    #     var_list=list(set(d_vars + r_vars)))
+
+    optim_d = optimizer.minimize(
+        losses['gan_d'],# - losses['info'], 
+        # var_list=d_vars)
+        var_list=list(set(d_vars + r_vars)))
 
     # optimizer_d = tf.train.AdamOptimizer(learning_rate=FLAGS.lr, name='opt_d')
     # optim_d = optimizer_d.minimize(losses['gan_d'] + losses['all'], var_list=d_vars)
@@ -221,8 +260,15 @@ def main():
     # optimizer_g = tf.train.AdamOptimizer(learning_rate=FLAGS.lr, name='opt_g')
     # optim_g = optimizer_g.minimize(losses['gan_g'], var_list=g_vars)
 
-    optimizer_g = tf.train.AdamOptimizer(learning_rate=FLAGS.lr, name='opt_g')
-    optim_g = optimizer_g.minimize(losses['gan_g'] + losses['info'], var_list=g_vars)
+
+    optimizer_g = tf.train.AdamOptimizer(learning_rate=FLAGS.lr * 10., name='opt_g')
+    optim_g = optimizer_g.minimize(
+        losses['gan_g'],# - losses['info'], 
+        var_list=dec_vars)
+
+    # optim_r2 = optimizer.minimize(
+    #     -losses['info'],
+    #     var_list=r_vars)
 
     # [Note] However, using this ended up with a VAE; 
     # I guess the gradient of GAN was too small.
@@ -269,8 +315,8 @@ def main():
                 print('Storing metadata')
                 run_options = tf.RunOptions(
                     trace_level=tf.RunOptions.FULL_TRACE)
-                summary, loss_value, kld, logp, _ = sess.run(
-                    [summaries, losses['all'], losses['D_KL'], losses['log_p'], optim],
+                summary, loss_value, kld, logp, _, _, _ = sess.run(
+                    [summaries, losses['all'], losses['D_KL'], losses['log_p'], optim, optim_d1, optim_r1],
                     options=run_options,
                     run_metadata=run_metadata)
                 writer.add_summary(summary, step)
@@ -282,8 +328,12 @@ def main():
                 summary, loss_d, ptt, pff, _ = sess.run(
                     [summaries, losses['gan_d'], losses['p_t_t'], losses['p_f_f'], optim_d])
                 writer.add_summary(summary, step)
+
                 summary, loss_g, _ = sess.run([summaries, losses['gan_g'], optim_g])
                 writer.add_summary(summary, step)
+
+                # # [TEST]
+                # loss_g = 0
             else:
                 summary, loss_value, kld, logp, _ = sess.run(
                     [summaries, losses['all'], losses['D_KL'], losses['log_p'], optim])
