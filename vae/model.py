@@ -229,10 +229,28 @@ class VAE2(object):
                             w, b = create_weight_and_bias(shape)
                             var[net][layer] = {'weight': w, 'bias': b}
 
+                        layer += '-y'
+                        if net == 'decoder':
+                            shape = [n_y, shapes[i + 1]]
+                            w, b = create_weight_and_bias(shape)
+                            var[net][layer] = {'weight': w, 'bias': b}
+
+
                     for out in ('out_mu', 'out_lv'):
                         with tf.variable_scope(out):
                             w, b = create_weight_and_bias(shapes[-2:])
                             var[net][out] = {'weight': w, 'bias': b}
+
+                        if net == 'decoder':
+                            layer = out + '-y'
+                            with tf.variable_scope(layer):
+                                w, b = create_weight_and_bias([n_y, shapes[-1]])
+                                var[net][layer] = {'weight': w, 'bias': b}
+                            # 
+                            layer = out + '-z'
+                            with tf.variable_scope(layer):
+                                w, b = create_weight_and_bias([n_z, shapes[-1]])
+                                var[net][layer] = {'weight': w, 'bias': b}
         return var
 
     # [TODO] _encoder and _decoder share a lot of similarity!
@@ -276,22 +294,45 @@ class VAE2(object):
             b = var[net][scope]['bias']
             y_to_zy = tf.add(tf.matmul(y, w), b)
 
-        x = y_to_zy + z_to_zy
+        x = tf.nn.relu(y_to_zy + z_to_zy)
         with tf.name_scope(net):
             for i in range(len(n_nodes) -2):
                 layer = 'hidden{:d}'.format(i)
                 with tf.name_scope(layer):
                     w = var[net][layer]['weight']
                     b = var[net][layer]['bias']
-                    x = tf.nn.relu(tf.add(tf.matmul(x, w), b))
+                    # y1 = tf.nn.relu(tf.add(tf.matmul(x, w), b))
+                    z1 = tf.matmul(x, w)
+
+                layer += '-y'
+                with tf.name_scope(layer):
+                    w = var[net][layer]['weight']
+                    # b = var[net][layer]['bias']
+                    z2 = tf.matmul(y, w)
+
+                print(z1.get_shape(), z2.get_shape(), b.get_shape())
+                x = tf.nn.relu(tf.add(z1 + z2, b))
                     
             outputs = list()
             for out in ['out_mu', 'out_lv']:
                 with tf.name_scope(out):
                     w = var[net][out]['weight']
                     b = var[net][out]['bias']
-                    y = tf.add(tf.matmul(x, w), b)
-                    outputs.append(y)
+                    z_ = tf.add(tf.matmul(x, w), b)
+
+                layer = out + '-y'
+                with tf.name_scope(layer):
+                    w = var[net][layer]['weight']
+                    y_to_xh = tf.matmul(y, w)
+
+                layer = out + '-z'
+                with tf.name_scope(layer):
+                    w = var[net][layer]['weight']
+                    z_to_xh = tf.matmul(z, w)
+
+                xh_ = tf.add(z_ + y_to_xh + z_to_xh, b)
+
+                outputs.append(xh_)
         return tuple(outputs)
 
     def _verify(self, x):

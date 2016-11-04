@@ -47,7 +47,7 @@ tf.app.flags.DEFINE_float('l2_regularization', 0.0, 'L2 regularization')
 tf.app.flags.DEFINE_float('lr', 1e-3, 'learning rate')
 tf.app.flags.DEFINE_integer('num_steps', 10000, 'num of steps (frames)')
 tf.app.flags.DEFINE_string(
-    'file_filter', '.*\.bin', 'filename filter')
+    'file_filter', '.+(150|[01][0-4]\d|0\d\d)\.bin', 'filename filter')
 
 # [MAKESHIFT][TODO]
 tf.app.flags.DEFINE_integer('step_gan', 2000, 'num of steps before GAN')
@@ -261,19 +261,11 @@ def main():
     # optim_g = optimizer_g.minimize(losses['gan_g'], var_list=g_vars)
 
 
-    optimizer_g = tf.train.AdamOptimizer(learning_rate=FLAGS.lr * 10., name='opt_g')
-    optim_g = optimizer_g.minimize(
+    # optimizer_g = tf.train.AdamOptimizer(learning_rate=FLAGS.lr * 2., name='opt_g')
+    
+    optim_g = optimizer.minimize(
         losses['gan_g'],# - losses['info'], 
         var_list=dec_vars)
-
-    # optim_r2 = optimizer.minimize(
-    #     -losses['info'],
-    #     var_list=r_vars)
-
-    # [Note] However, using this ended up with a VAE; 
-    # I guess the gradient of GAN was too small.
-    # optim_g = optimizer.minimize(losses['gan_g'] + losses['all'],
-    #     var_list=trainable)
 
     # Writer of Summary
     writer = tf.train.SummaryWriter(logdir)
@@ -329,6 +321,11 @@ def main():
                     [summaries, losses['gan_d'], losses['p_t_t'], losses['p_f_f'], optim_d])
                 writer.add_summary(summary, step)
 
+                # # [TEST]
+                # loss_d, ptt, pff = sess.run(
+                #     [losses['gan_d'], losses['p_t_t'], losses['p_f_f']])
+
+                summary, loss_g, _ = sess.run([summaries, losses['gan_g'], optim_g])
                 summary, loss_g, _ = sess.run([summaries, losses['gan_g'], optim_g])
                 writer.add_summary(summary, step)
 
