@@ -247,7 +247,7 @@ def main():
     #     var_list=list(set(d_vars + r_vars)))
 
     optim_d = optimizer.minimize(
-        losses['gan_d'],# - losses['info'], 
+        losses['gan_d'] - losses['info'], 
         # var_list=d_vars)
         var_list=list(set(d_vars + r_vars)))
 
@@ -317,17 +317,20 @@ def main():
                     'step_{:04d}'.format(step))
                 # J: I didn't use the timeline.
             elif step >= FLAGS.step_gan:
+
+                # summary, loss_g, _ = sess.run([summaries, losses['gan_g'], optim_g])
+                summary, loss_g, _ = sess.run([summaries, losses['gan_g'], optim_g])
+                writer.add_summary(summary, step)
+
+
                 summary, loss_d, ptt, pff, _ = sess.run(
-                    [summaries, losses['gan_d'], losses['p_t_t'], losses['p_f_f'], optim_d])
+                    [summaries, losses['gan_d'], losses['p_t_t'], 
+                     losses['p_f_f'], optim_d])
                 writer.add_summary(summary, step)
 
                 # # [TEST]
                 # loss_d, ptt, pff = sess.run(
                 #     [losses['gan_d'], losses['p_t_t'], losses['p_f_f']])
-
-                summary, loss_g, _ = sess.run([summaries, losses['gan_g'], optim_g])
-                summary, loss_g, _ = sess.run([summaries, losses['gan_g'], optim_g])
-                writer.add_summary(summary, step)
 
                 # # [TEST]
                 # loss_g = 0
