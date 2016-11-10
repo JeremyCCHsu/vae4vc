@@ -1,3 +1,4 @@
+import pdb
 import tensorflow as tf
 import numpy as np
 # import matplotlib
@@ -179,8 +180,12 @@ class ToyGAN(object):
             loss_d=tf.reduce_mean(loss_d),
             loss_g=tf.reduce_mean(loss_g))
 
-    def _loss_mse(self, x, xh):
-        return {'mse': tf.reduce_mean(tf.reduce_sum(tf.abs(x - xh), 1))}
+    # def _loss_mse(self, x, xh):
+    #     ''' this MSE is WRONG because z and x aren't aligned!
+    #         That's why Eric Jang proposed a sorted version in his blog.
+    #         http://blog.evjang.com/2016/06/generative-adversarial-nets-in.html
+    #     '''
+    #     return {'mse': tf.reduce_mean(tf.reduce_sum(tf.abs(x - xh), 1))}
 
         # return 
     def get_losses(self):
@@ -249,16 +254,9 @@ def main():  # trian
     x = np.concatenate(x, 0)
 
     plt.figure()
-    plt.plot(x[:,0], x[:,1], 'ro')
+    plt.plot(x[:, 0], x[:, 1], 'ro')
     plt.hold(True)
-    plt.plot(xh[:,0], xh[:,1], 'x')
-    # plt.savefig('test-xh.png')
-    # plt.close()
-    
-
-
-    # plt.figure()
-
+    plt.plot(xh[:, 0], xh[:, 1], 'x')
     plt.savefig('test-x-xh.png')
     plt.close()
     
@@ -271,12 +269,39 @@ def main():  # trian
     # plt.close()
     
 
+    # z = [[x, y] for x in np.linspace(-1, 1, 256) for y in np.linspace(-1, 1, 256)]
+    # z = np.asarray(z)
+
+    saver = tf.train.Saver()
+    saver.save(sess, 'test_log/model.ckpt', global_step=epoch)
+
+    x = list()
+    p = list()
+    for i in np.linspace(-1, 1, 128):
+        x_ = [i * np.ones((128,)), np.linspace(-1, 1, 128)]
+        x_ = np.asarray(x_).T
+        p_ = sess.run(gan.p, feed_dict={gan.x: x_})
+        x.append(x_)
+        p.append(p_)
+
+    p = np.concatenate(p, axis=0)
+    x = np.concatenate(x, axis=0)
+
+    pdb.set_trace()
+
+    # isTrue = p[:]
+    plt.figure()
+    plt.plot(x[p[:, 0] > .5, 0], x[p[:, 0] > .5, 1], 'ro')
+    plt.hold(True)
+    plt.plot(x[p[:, 0] <= .5, 0], x[p[:, 0] <= .5, 1], 'bx')
+    plt.savefig('test-all-area.png')
+
     print('Generator')
     for v in g_vars:
         print(v.name)
     
     # 
-    print('Discriminator')
+    print('\nDiscriminator')
     for v in d_vars:
         print(v.name)
 

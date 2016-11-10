@@ -137,7 +137,8 @@ def SamplingLayer(
         # new_shape = mu.get_shape().as_list()
         # new_shape[0] = n_sample
         shape = tf.shape(mu)
-        eps = tf.random_normal(
+        # eps = tf.random_normal(
+        eps = tf.truncated_normal(
             shape=shape, mean=0.0, stddev=1.0, name='eps')
         eps = tf.mul(std, eps)
         eps = tf.add(mu, eps)

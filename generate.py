@@ -152,6 +152,7 @@ def main():
             plt.savefig('test-{:s}.png'.format(names[i]))
             plt.close()
             
+            pdb.set_trace()
 
 
         # ============ Plot converted spectra (10 subplots) ==========

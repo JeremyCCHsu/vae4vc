@@ -26,6 +26,8 @@ for f in files:
 
 	x_all.append(x)
 
+pdb.set_trace()
+
 x_all = np.concatenate(x_all, axis=0)
 
 xmu = x_all.mean(0).reshape([1, mFea -1])
@@ -38,17 +40,18 @@ print(xmax)
 # print()
 print(xmin)
 
-np.save('xmax.npf', xmax)
-np.save('xmin.npf', xmin)
+np.save('xmax', xmax)
+np.save('xmin', xmin)
+# xmax.tofile('xmax.npy')
+# xmin.tofile('xmax.npy')
 
 
+# for i in range(513):
+# 	x_ = x_all[:, i]
+# 	bins = np.linspace(xmin[0, i], xmax[0, i], 256)
 
-for i in range(513):
-	x_ = x_all[:, i]
-	bins = np.linspace(xmin[0, i], xmax[0, i], 256)
-
-	plt.figure()
-	plt.hist(x_, bins)
-	plt.savefig('img/{:03d}'.format(i))
-	plt.close()
+# 	plt.figure()
+# 	plt.hist(x_, bins)
+# 	plt.savefig('img/{:03d}'.format(i))
+# 	plt.close()
 

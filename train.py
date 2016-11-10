@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import json
+import pdb
 
 import tensorflow as tf
 import numpy as np
@@ -174,6 +175,14 @@ def main():
             feature='log-spectrum')
         # [TODO] num_example_per_epoch: compute from datadir
 
+        xmin = np.load('test_tmp/xmin.npf.npy').astype(np.float32)
+        xmax = np.load('test_tmp/xmax.npf.npy').astype(np.float32)
+
+        xmin = tf.constant(xmin)
+        xmax = tf.constant(xmax)
+
+        x = tf.div(x - xmin, xmax - xmin)
+        # pdb.set_trace()
     # The Learner
     with open(FLAGS.architecture) as f:
         architecture = json.load(f)
