@@ -413,7 +413,7 @@ class VAE2(object):
 
     def loss(self, x, y, l2_regularization=None, name='vae'):
         losses = dict()
-        
+
         with tf.name_scope(name):
             z_mu, z_lv = self._encode(x)
             z = SamplingLayer(z_mu, z_lv)
@@ -427,16 +427,15 @@ class VAE2(object):
                 # [Watch out] L = logp - DKL, and we use a minimizer
                 # loss = - tf.reduce_mean(reconstr_loss - latent_loss)
 
-                
                 losses['D_KL'] = tf.reduce_mean(latent_loss)
                 losses['log_p'] = tf.reduce_mean(reconstr_loss)
 
                 # loss = tf.reduce_mean(reconstr_loss) + tf.reduce_mean(latent_loss)
 
-                losses['all'] = 0.1 * losses['D_KL'] + losses['log_p']
+                losses['all'] = losses['D_KL'] + losses['log_p']
+                # losses['all'] = tf.reduce_mean(latent_loss + reconstr_loss)
 
-                # [TODO] This means that I SPECIFY the first dimension to be the judged TRUTH
-
+                
 
                 # [Bernoulli]
                 xh_mu = tf.nn.sigmoid(xh_mu)
@@ -445,6 +444,7 @@ class VAE2(object):
                 pT = self._verify(x)  # + noise1)
                 pF = self._verify(xh_mu)  # + noise2)
 
+                # [TODO] This means that I SPECIFY the first dimension to be the judged TRUTH
                 bz = x.get_shape().as_list()[0]
                 # n_c = self.architecture['discriminator'][-1]
                 l = tf.ones((bz, 1))
@@ -453,19 +453,16 @@ class VAE2(object):
                 label_T = tf.concat(1, [l, o])
                 label_F = tf.concat(1, [o, l])
 
-                logpTT = tf.nn.softmax_cross_entropy_with_logits(
-                    pT,
-                    label_T)
+                losses['p_t_t'] = tf.reduce_mean(
+                    tf.nn.softmax_cross_entropy_with_logits(pT, label_T))
 
-                logpFF = tf.nn.softmax_cross_entropy_with_logits(
-                    pF,
-                    label_F)
+                losses['p_f_f'] = tf.reduce_mean(
+                    tf.nn.softmax_cross_entropy_with_logits(pF, label_F))
 
-                discriminator_loss = logpTT + logpFF
+                losses['gan_d'] = losses['p_t_t'] + losses['p_f_f']
 
-                generator_loss = tf.nn.softmax_cross_entropy_with_logits(
-                    pF,
-                    label_T)
+                losses['gan_g'] = tf.reduce_mean(
+                    tf.nn.softmax_cross_entropy_with_logits(pF, label_T))
 
 
                 # logits
@@ -480,14 +477,14 @@ class VAE2(object):
                     c_F,
                     y)
 
-                info_loss = info_T_loss + info_F_loss
+                losses['info'] = tf.reduce_mean(info_T_loss + info_F_loss)
 
-                losses['p_t_t'] = tf.reduce_mean(logpTT)
-                losses['p_f_f'] = tf.reduce_mean(logpFF)
-                losses['gan_d'] = tf.reduce_mean(discriminator_loss)
-                losses['gan_g'] = tf.reduce_mean(generator_loss)
+                # losses['p_t_t'] = tf.reduce_mean(logpTT)
+                # losses['p_f_f'] = tf.reduce_mean(logpFF)
+                # losses['gan_d'] = tf.reduce_mean(discriminator_loss)
+                # losses['gan_g'] = tf.reduce_mean(generator_loss)
                 # losses['info'] = tf.constant(0.)
-                losses['info'] = tf.reduce_mean(info_loss)
+                # losses['info'] = tf.reduce_mean(info_loss)
 
                 if l2_regularization is None or l2_regularization is 0.0:
                     pass

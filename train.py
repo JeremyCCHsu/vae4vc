@@ -201,22 +201,12 @@ def main():
 
     # [TODO] I disabled encoder update
     d_vars = [var for var in trainable if 'discriminator' in var.name]
-    # print('Discriminator')
-    # for v in d_vars:
-    #     print(v.name)
 
-    # print('Generator')
     g_vars = [var for var in trainable \
         if 'discriminator' not in var.name and 'recognizer' not in var.name \
-        # if 'encoder' in var.name or 'decoder' in var.name \
-        # and 'encoder' not in var.name
         ]
 
-
     dec_vars = [var for var in trainable if 'decoder' in var.name]
-
-    # for v in g_vars:
-    #     print(v.name)
 
     r_vars = [var for var in trainable if 'recognizer' in var.name]
 
@@ -232,20 +222,19 @@ def main():
 
 
 
-    # optimizer = tf.train.AdamOptimizer(learning_rate=FLAGS.lr)    
-    # optim = optimizer.minimize(losses['all'], var_list=trainable)
     optimizer = tf.train.AdamOptimizer(learning_rate=FLAGS.lr)    
-    optim = optimizer.minimize(
-        losses['all'], 
+    optim_v = optimizer.minimize(
+        # losses['all'], 
+        0.05 * losses['D_KL'] + losses['log_p'],
         var_list=g_vars)
 
     optim_d1 = optimizer.minimize(
         losses['gan_d'],
         var_list=d_vars)
 
-    # optim_r1 = optimizer.minimize(
-    #     -losses['info'],
-    #     var_list=r_vars)
+    optim_r1 = optimizer.minimize(
+        losses['info'],
+        var_list=r_vars)
 
 
     optim_d = optimizer.minimize(
@@ -276,7 +265,6 @@ def main():
         # if is_overwritten_training or saved_global_step is None:
         if saved_global_step is None:
             saved_global_step = -1
-        # print(saved_global_step)
     except:
         print(
             "Something went wrong while restoring checkpoint."
@@ -297,8 +285,10 @@ def main():
                 print('Storing metadata')
                 run_options = tf.RunOptions(
                     trace_level=tf.RunOptions.FULL_TRACE)
-                summary, loss_value, kld, logp, _, _ = sess.run(
-                    [summaries, losses['all'], losses['D_KL'], losses['log_p'], optim, optim_d1],
+                summary, loss_value, kld, logp, _, _, _ = sess.run(
+                    [summaries,
+                    losses['all'], losses['D_KL'], losses['log_p'],
+                    optim_v, optim_d1, optim_r1],
                     options=run_options,
                     run_metadata=run_metadata)
                 writer.add_summary(summary, step)
@@ -308,28 +298,32 @@ def main():
                 # J: I didn't use the timeline.
             elif step >= FLAGS.step_gan:
                 summary, loss_d, ptt, pff, _ = sess.run(
-                    [summaries, losses['gan_d'], losses['p_t_t'], 
-                     losses['p_f_f'], optim_d])
+                    [summaries,
+                    losses['gan_d'], losses['p_t_t'], losses['p_f_f'],
+                    optim_d])
 
-                summary, loss_g, _ = sess.run([summaries, losses['gan_g'], optim_g])
+                summary, loss_g, _ = sess.run(
+                    [summaries, losses['gan_g'], optim_g])
                 writer.add_summary(summary, step)
 
             else:
-                summary, loss_value, kld, logp, _ = sess.run(
-                    [summaries, losses['all'], losses['D_KL'], losses['log_p'], optim])
+                summary, loss_value, kld, logp, _, _, _ = sess.run(
+                    [summaries,
+                    losses['all'], losses['D_KL'], losses['log_p'],
+                    optim_v, optim_d1, optim_r1])
                 writer.add_summary(summary, step)
-
 
             duration = time.time() - start_time
 
             if step < FLAGS.step_gan:
-                print('step {:d}: D_KL = {:f}, log(p) = {:.2f} bits, ({:.3f} sec/step)'
-                  .format(step, kld, logp / np.log(2), duration))
+                print('step {:d}: D_KL = {:f}, log(p) = {:.2f} bits,'
+                      ' ({:.3f} sec/step)'
+                      .format(step, kld, logp / np.log(2.), duration))
             else:
                 # print(ptt.shape, ptt.dtype)
-                print('step {:d}: D loss = {:.2f}, G\'s fooling ability = {:.2f}%, '
-                    'P(T|T) = {:.2f}%, P(F|F) = {:.2f}%, ({:.3f} sec/step)'
-                    .format(
+                print('step {:d}: D loss = {:.2f}, G loss= {:.2f}, '
+                      'L(T|T) = {:.2f}, L(F|F) = {:.2f}, ({:.3f} sec/step)'
+                      .format(
                         step,
                         loss_d,
                         loss_g,
@@ -338,9 +332,10 @@ def main():
                         # np.exp(-loss_g) * 100.,
                         # np.exp(ptt) * 100.,
                         # np.exp(pff) * 100.,
-                        duration)
-                )
+                        duration))
 
+            if step == FLAGS.step_gan - 1:
+                save(saver, sess, logdir, step)
 
             # if step % FLAGS.checkpoint_every == 0:
             #     save(saver, sess, logdir, step)

@@ -156,11 +156,13 @@ def main():
 
         # ============ Plot converted spectra (10 subplots) ==========
         # x_source = sess.run(spectrum)
+        x_c_all = list()
         plt.figure(figsize=(48, 12))
         for spk in range(10):
             y_target = np.zeros([x_source.shape[0], N_SPEAKER])
             y_target[:, spk] = 1.0
             x_converted = sess.run(xh_, feed_dict={x_: x_source, y_: y_target})
+            x_c_all.append(x_converted)
             plt.subplot(3, 4, spk + 1)
             plt.imshow(np.flipud(x_converted.T), aspect='auto')
             # plt.axis('off')
@@ -168,6 +170,10 @@ def main():
             plt.title(id2name[spk])
         plt.savefig('test-{:s}-as-source.png'.format(x_fname))
 
+        plt.figure()
+        for i in range(10):
+            plt.plot(x_c_all[i][100])
+        plt.savefig('test-plots.png')
 
     except KeyboardInterrupt:
         print('Interrupted')
