@@ -103,6 +103,15 @@ def main():
         for spk in range(10):
             x_source, y_source, x_fname = sess.run([spectrum, label, filename])
 
+            xmin = np.load('test_tmp/xmin.npf.npy').astype(np.float32)
+            xmax = np.load('test_tmp/xmax.npf.npy').astype(np.float32)
+
+            # xmin = tf.constant(xmin)
+            # xmax = tf.constant(xmax)
+
+            # x_source = tf.div(x_source - xmin, xmax - xmin)
+            x_source = (x_source - xmin) / (xmax - xmin)
+
             spkId = int(y_source[0])
 
             y_source = np.zeros((y_source.shape[0], 10))
@@ -152,7 +161,7 @@ def main():
             plt.savefig('test-{:s}.png'.format(names[i]))
             plt.close()
             
-            pdb.set_trace()
+            # pdb.set_trace()
 
 
         # ============ Plot converted spectra (10 subplots) ==========

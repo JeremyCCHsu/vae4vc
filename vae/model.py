@@ -333,6 +333,7 @@ class VAE2(object):
 
                 xh_ = tf.add(z_ + y_to_xh + z_to_xh, b)
 
+
                 outputs.append(xh_)
         return tuple(outputs)
 
@@ -356,8 +357,8 @@ class VAE2(object):
             with tf.name_scope(scope):
                 w = var[net][scope]['weight']
                 b = var[net][scope]['bias']
-                y = tf.nn.softmax(tf.add(tf.matmul(x, w), b))
-
+                # y = tf.nn.softmax(tf.add(tf.matmul(x, w), b))
+                y = tf.add(tf.matmul(x, w), b)
         #             outputs.append(y)
         # return tuple(outputs)
         return y
@@ -384,7 +385,8 @@ class VAE2(object):
             with tf.name_scope(scope):
                 w = var['recognizer'][scope]['weight']
                 b = var['recognizer'][scope]['bias']
-                y = tf.nn.softmax(tf.add(tf.matmul(x, w), b))
+                # y = tf.nn.softmax(tf.add(tf.matmul(x, w), b))
+                y = tf.add(tf.matmul(x, w), b)
         return y
 
 
@@ -394,7 +396,7 @@ class VAE2(object):
 
     def decode(self, z, y):
         xh_mu, _ = self._decode(z, y)
-        return xh_mu
+        return tf.nn.sigmoid(xh_mu)
 
     def _compute_latent_objective(self, z_mu, z_lv):
         with tf.name_scope('latent_loss'):
@@ -404,7 +406,8 @@ class VAE2(object):
 
     def _compute_visible_objective(self, x, xh_mu, xh_lv):
         with tf.name_scope('visible_loss'):
-            logp = GaussianLogDensity(x, xh_mu, xh_lv, 'log_p_x')
+            # logp = GaussianLogDensity(x, xh_mu, xh_lv, 'log_p_x')
+            logp = tf.nn.sigmoid_cross_entropy_with_logits(xh_mu, x)
             return logp
 
     def loss(self, x, y, l2_regularization=None, name='vae'):
@@ -414,52 +417,99 @@ class VAE2(object):
             xh_mu, xh_lv = self._decode(z, y)
             xh_lv = tf.zeros(tf.shape(xh_lv))
 
-            c_F = self._recognize(xh_mu)
-            c_T = self._recognize(x)
 
             with tf.name_scope('loss'):
                 latent_loss = self._compute_latent_objective(z_mu, z_lv)
                 reconstr_loss = self._compute_visible_objective(
                     x, xh_mu, xh_lv)
                 # [Watch out] L = logp - DKL, and we use a minimizer
-                loss = - tf.reduce_mean(reconstr_loss - latent_loss)
-                tf.scalar_summary('loss', loss)
+                # loss = - tf.reduce_mean(reconstr_loss - latent_loss)
+
+                loss = tf.reduce_sum(reconstr_loss) + tf.reduce_mean(latent_loss)
 
 
-                ylogc = tf.mul(y, tf.log(c_F + EPSILON))
-                ylogc = tf.reduce_sum(ylogc, -1)
+
+                # ylogc = tf.mul(y, tf.log(c_F + EPSILON))
+                # ylogc = tf.reduce_sum(ylogc, -1)
 
 
-                ylogc_true = tf.mul(y, tf.log(c_T + EPSILON))
-                ylogc_true = tf.reduce_sum(ylogc_true, -1)
+                # ylogc_true = tf.mul(y, tf.log(c_T + EPSILON))
+                # ylogc_true = tf.reduce_sum(ylogc_true, -1)
 
                 # L_I = Ex Ec log Q[c|x]   + H(c)
 
 
-                with tf.name_scope('noise'):
-                    noise1 = tf.random_normal(tf.shape(x), 0., 2.)
-                    noise2 = tf.random_normal(tf.shape(xh_mu), 0., 2.)
+                # with tf.name_scope('noise'):
+                #     noise1 = tf.random_normal(tf.shape(x), 0., 2.)
+                #     noise2 = tf.random_normal(tf.shape(xh_mu), 0., 2.)
 
                 # [TODO] This means that I SPECIFY the first dimension to be the judged TRUTH
+
+
+                # [Bernoulli]
+                xh_mu = tf.nn.sigmoid(xh_mu)
+
+                # # logits
+                # c_F = self._recognize(xh_mu)
+                # c_T = self._recognize(x)
+
+                # logits
                 pT = self._verify(x)  # + noise1)
                 pF = self._verify(xh_mu)  # + noise2)
 
-                pTT = pT[:, 0]
-                pFT = pT[:, 1]  # judge=F, truth=T
-                pFF = pF[:, 1]
-                pTF = pF[:, 0]
+                # pTT = pT[:, 0]
+                # pFT = pT[:, 1]  # judge=F, truth=T
+                # pFF = pF[:, 1]
+                # pTF = pF[:, 0]
 
-                logpTT = tf.log(pTT + EPSILON)
-                logpFF = tf.log(pFF + EPSILON)
+                # logpTT = tf.log(pTT + EPSILON)
+                # logpFF = tf.log(pFF + EPSILON)
 
-                logpTF = tf.log(pTF + EPSILON)
-                logpFT = tf.log(pFT + EPSILON)
+                # logpTF = tf.log(pTF + EPSILON)
+                # logpFT = tf.log(pFT + EPSILON)
 
-                discriminator_loss = - (logpTT + logpFF)
-                
+                # discriminator_loss = - (logpTT + logpFF)
+
+                bz = x.get_shape().as_list()[0]
+                # n_c = self.architecture['discriminator'][-1]
+                l = tf.ones((bz, 1))
+                o = tf.zeros((bz, 1))
+
+                label_T = tf.concat(1, [l, o])
+                label_F = tf.concat(1, [o, l])
+
+                logpTT = tf.nn.softmax_cross_entropy_with_logits(
+                    pT,
+                    label_T)
+
+                logpFF = tf.nn.softmax_cross_entropy_with_logits(
+                    pF,
+                    label_F)
+
+                discriminator_loss = logpTT + logpFF
+
+                generator_loss = tf.nn.softmax_cross_entropy_with_logits(
+                    pF,
+                    label_T)
+
+
+                # logits
+                c_T = self._recognize(x)
+                c_F = self._recognize(xh_mu)
+
+                info_T_loss = tf.nn.softmax_cross_entropy_with_logits(
+                    c_T,
+                    y)
+
+                info_F_loss = tf.nn.softmax_cross_entropy_with_logits(
+                    c_F,
+                    y)
+
+                info_loss = info_T_loss + info_F_loss
+
                 # generator_loss = - tf.log(1. - pFF + EPSILON)
                 # generator_loss = - tf.log(pTF + EPSILON)
-                generator_loss = - (logpTF)
+                # generator_loss = - (logpTF)
 
                 losses = dict()
                 losses['all'] = loss
@@ -469,7 +519,9 @@ class VAE2(object):
                 losses['p_f_f'] = tf.reduce_mean(logpFF)
                 losses['gan_d'] = tf.reduce_mean(discriminator_loss)
                 losses['gan_g'] = tf.reduce_mean(generator_loss)
-                losses['info'] = tf.reduce_mean(ylogc + ylogc_true)
+                # losses['info'] = tf.reduce_mean(ylogc + ylogc_true)
+                # losses['info'] = tf.constant(0.)
+                losses['info'] = tf.reduce_mean(info_loss)
 
                 if l2_regularization is None or l2_regularization is 0.0:
                     pass

@@ -243,9 +243,9 @@ def main():
         losses['gan_d'],
         var_list=d_vars)
 
-    optim_r1 = optimizer.minimize(
-        -losses['info'],
-        var_list=r_vars)
+    # optim_r1 = optimizer.minimize(
+    #     -losses['info'],
+    #     var_list=r_vars)
 
 
     # loss_infogan = 
@@ -316,8 +316,8 @@ def main():
                 print('Storing metadata')
                 run_options = tf.RunOptions(
                     trace_level=tf.RunOptions.FULL_TRACE)
-                summary, loss_value, kld, logp, _, _, _ = sess.run(
-                    [summaries, losses['all'], losses['D_KL'], losses['log_p'], optim, optim_d1, optim_r1],
+                summary, loss_value, kld, logp, _, _ = sess.run(
+                    [summaries, losses['all'], losses['D_KL'], losses['log_p'], optim, optim_d1],
                     options=run_options,
                     run_metadata=run_metadata)
                 writer.add_summary(summary, step)
@@ -326,15 +326,15 @@ def main():
                     'step_{:04d}'.format(step))
                 # J: I didn't use the timeline.
             elif step >= FLAGS.step_gan:
+                summary, loss_d, ptt, pff, _ = sess.run(
+                    [summaries, losses['gan_d'], losses['p_t_t'], 
+                     losses['p_f_f'], optim_d])
 
                 # summary, loss_g, _ = sess.run([summaries, losses['gan_g'], optim_g])
                 summary, loss_g, _ = sess.run([summaries, losses['gan_g'], optim_g])
                 writer.add_summary(summary, step)
 
 
-                summary, loss_d, ptt, pff, _ = sess.run(
-                    [summaries, losses['gan_d'], losses['p_t_t'], 
-                     losses['p_f_f'], optim_d])
                 writer.add_summary(summary, step)
 
                 # # [TEST]
