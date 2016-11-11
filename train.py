@@ -248,32 +248,13 @@ def main():
     #     var_list=r_vars)
 
 
-    # loss_infogan = 
-
-    # optimizer_d = tf.train.AdamOptimizer(learning_rate=FLAGS.lr, name='opt_d')
-    # optim_d = optimizer_d.minimize(
-    #     losses['gan_d'] - losses['info'], 
-    #     var_list=list(set(d_vars + r_vars)))
-
     optim_d = optimizer.minimize(
-        losses['gan_d'] - losses['info'], 
+        losses['gan_d'] + losses['info'], 
         # var_list=d_vars)
         var_list=list(set(d_vars + r_vars)))
 
-    # optimizer_d = tf.train.AdamOptimizer(learning_rate=FLAGS.lr, name='opt_d')
-    # optim_d = optimizer_d.minimize(losses['gan_d'] + losses['all'], var_list=d_vars)
-
-    # optimizer_g = tf.train.AdamOptimizer(learning_rate=FLAGS.lr, name='opt_g')
-    # optim_g = optimizer_g.minimize(losses['gan_g'] + losses['D_KL'], var_list=g_vars)
-
-    # optimizer_g = tf.train.AdamOptimizer(learning_rate=FLAGS.lr, name='opt_g')
-    # optim_g = optimizer_g.minimize(losses['gan_g'], var_list=g_vars)
-
-
-    # optimizer_g = tf.train.AdamOptimizer(learning_rate=FLAGS.lr * 2., name='opt_g')
-    
     optim_g = optimizer.minimize(
-        losses['gan_g'],# - losses['info'], 
+        losses['gan_g'] + losses['info'], 
         var_list=dec_vars)
 
     # Writer of Summary
@@ -330,19 +311,9 @@ def main():
                     [summaries, losses['gan_d'], losses['p_t_t'], 
                      losses['p_f_f'], optim_d])
 
-                # summary, loss_g, _ = sess.run([summaries, losses['gan_g'], optim_g])
                 summary, loss_g, _ = sess.run([summaries, losses['gan_g'], optim_g])
                 writer.add_summary(summary, step)
 
-
-                writer.add_summary(summary, step)
-
-                # # [TEST]
-                # loss_d, ptt, pff = sess.run(
-                #     [losses['gan_d'], losses['p_t_t'], losses['p_f_f']])
-
-                # # [TEST]
-                # loss_g = 0
             else:
                 summary, loss_value, kld, logp, _ = sess.run(
                     [summaries, losses['all'], losses['D_KL'], losses['log_p'], optim])
@@ -352,8 +323,8 @@ def main():
             duration = time.time() - start_time
 
             if step < FLAGS.step_gan:
-                print('step {:d}: D_KL = {:f}, log(p) = {:f}, ({:.3f} sec/step)'
-                  .format(step, kld, logp, duration))
+                print('step {:d}: D_KL = {:f}, log(p) = {:.2f} bits, ({:.3f} sec/step)'
+                  .format(step, kld, logp / np.log(2), duration))
             else:
                 # print(ptt.shape, ptt.dtype)
                 print('step {:d}: D loss = {:.2f}, G\'s fooling ability = {:.2f}%, '
@@ -361,9 +332,12 @@ def main():
                     .format(
                         step,
                         loss_d,
-                        np.exp(-loss_g) * 100.,
-                        np.exp(ptt) * 100.,
-                        np.exp(pff) * 100.,
+                        loss_g,
+                        ptt,
+                        pff,
+                        # np.exp(-loss_g) * 100.,
+                        # np.exp(ptt) * 100.,
+                        # np.exp(pff) * 100.,
                         duration)
                 )
 

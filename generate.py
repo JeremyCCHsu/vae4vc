@@ -26,22 +26,14 @@ tf.app.flags.DEFINE_string(
 tf.app.flags.DEFINE_string(
     'architecture', 'architecture.json', 'network architecture')
 tf.app.flags.DEFINE_string('logdir', 'logdir', 'log dir')
-# tf.app.flags.DEFINE_string(
-#     'logdir_root', None, 'log dir')
-# tf.app.flags.DEFINE_string(
-#     'restore_from', None, 'resotre form dir')
 tf.app.flags.DEFINE_string('checkpoint', None, 'model checkpoint')
 
-tf.app.flags.DEFINE_integer('batch_size', 128, 'batch size')
-tf.app.flags.DEFINE_float('l2_regularization', 0.0, 'L2 regularization')
-tf.app.flags.DEFINE_float('lr', 1e-3, 'learning rate')
-tf.app.flags.DEFINE_integer('num_steps', 10000, 'num of steps (frames)')
 
 tf.app.flags.DEFINE_string(
     'file_filter', '.*\.bin', 'filename filter')
 
 # TEST_PATTERN = 'SF1-100001.bin'
-TEST_PATTERN = '.*001\.bin'
+TEST_PATTERN = '.*151\.bin'
 N_SPEAKER = 10
 
 def main():
@@ -69,8 +61,6 @@ def main():
         # batch_size=spectrum.shape[0],
         batch_size=128,  # [TODO] useless?
         architecture=architecture)
-
-
 
     x_ = tf.placeholder(tf.float32)
     y_ = tf.placeholder(tf.float32)
@@ -155,9 +145,9 @@ def main():
             
             plt.subplot(515)
             # pdb.set_trace()
-            plt.plot(xh_all[i][350])
+            plt.plot(xh_all[i][100])
             plt.hold(True)
-            plt.plot(x_all[i][350], 'r')
+            plt.plot(x_all[i][100], 'r')
             plt.savefig('test-{:s}.png'.format(names[i]))
             plt.close()
             

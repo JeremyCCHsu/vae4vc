@@ -313,7 +313,7 @@ class VAE2(object):
 
                 print(z1.get_shape(), z2.get_shape(), b.get_shape())
                 x = tf.nn.relu(tf.add(z1 + z2, b))
-                    
+
             outputs = list()
             for out in ['out_mu', 'out_lv']:
                 with tf.name_scope(out):
@@ -408,15 +408,17 @@ class VAE2(object):
         with tf.name_scope('visible_loss'):
             # logp = GaussianLogDensity(x, xh_mu, xh_lv, 'log_p_x')
             logp = tf.nn.sigmoid_cross_entropy_with_logits(xh_mu, x)
+            logp = tf.reduce_sum(logp, -1)
             return logp
 
     def loss(self, x, y, l2_regularization=None, name='vae'):
+        losses = dict()
+        
         with tf.name_scope(name):
             z_mu, z_lv = self._encode(x)
             z = SamplingLayer(z_mu, z_lv)
             xh_mu, xh_lv = self._decode(z, y)
             xh_lv = tf.zeros(tf.shape(xh_lv))
-
 
             with tf.name_scope('loss'):
                 latent_loss = self._compute_latent_objective(z_mu, z_lv)
@@ -425,23 +427,13 @@ class VAE2(object):
                 # [Watch out] L = logp - DKL, and we use a minimizer
                 # loss = - tf.reduce_mean(reconstr_loss - latent_loss)
 
-                loss = tf.reduce_sum(reconstr_loss) + tf.reduce_mean(latent_loss)
+                
+                losses['D_KL'] = tf.reduce_mean(latent_loss)
+                losses['log_p'] = tf.reduce_mean(reconstr_loss)
 
+                # loss = tf.reduce_mean(reconstr_loss) + tf.reduce_mean(latent_loss)
 
-
-                # ylogc = tf.mul(y, tf.log(c_F + EPSILON))
-                # ylogc = tf.reduce_sum(ylogc, -1)
-
-
-                # ylogc_true = tf.mul(y, tf.log(c_T + EPSILON))
-                # ylogc_true = tf.reduce_sum(ylogc_true, -1)
-
-                # L_I = Ex Ec log Q[c|x]   + H(c)
-
-
-                # with tf.name_scope('noise'):
-                #     noise1 = tf.random_normal(tf.shape(x), 0., 2.)
-                #     noise2 = tf.random_normal(tf.shape(xh_mu), 0., 2.)
+                losses['all'] = 0.1 * losses['D_KL'] + losses['log_p']
 
                 # [TODO] This means that I SPECIFY the first dimension to be the judged TRUTH
 
@@ -449,26 +441,9 @@ class VAE2(object):
                 # [Bernoulli]
                 xh_mu = tf.nn.sigmoid(xh_mu)
 
-                # # logits
-                # c_F = self._recognize(xh_mu)
-                # c_T = self._recognize(x)
-
                 # logits
                 pT = self._verify(x)  # + noise1)
                 pF = self._verify(xh_mu)  # + noise2)
-
-                # pTT = pT[:, 0]
-                # pFT = pT[:, 1]  # judge=F, truth=T
-                # pFF = pF[:, 1]
-                # pTF = pF[:, 0]
-
-                # logpTT = tf.log(pTT + EPSILON)
-                # logpFF = tf.log(pFF + EPSILON)
-
-                # logpTF = tf.log(pTF + EPSILON)
-                # logpFT = tf.log(pFT + EPSILON)
-
-                # discriminator_loss = - (logpTT + logpFF)
 
                 bz = x.get_shape().as_list()[0]
                 # n_c = self.architecture['discriminator'][-1]
@@ -507,19 +482,10 @@ class VAE2(object):
 
                 info_loss = info_T_loss + info_F_loss
 
-                # generator_loss = - tf.log(1. - pFF + EPSILON)
-                # generator_loss = - tf.log(pTF + EPSILON)
-                # generator_loss = - (logpTF)
-
-                losses = dict()
-                losses['all'] = loss
-                losses['D_KL'] = tf.reduce_mean(latent_loss)
-                losses['log_p'] = tf.reduce_mean(reconstr_loss)
                 losses['p_t_t'] = tf.reduce_mean(logpTT)
                 losses['p_f_f'] = tf.reduce_mean(logpFF)
                 losses['gan_d'] = tf.reduce_mean(discriminator_loss)
                 losses['gan_g'] = tf.reduce_mean(generator_loss)
-                # losses['info'] = tf.reduce_mean(ylogc + ylogc_true)
                 # losses['info'] = tf.constant(0.)
                 losses['info'] = tf.reduce_mean(info_loss)
 
