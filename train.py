@@ -225,7 +225,7 @@ def main():
     optimizer = tf.train.AdamOptimizer(learning_rate=FLAGS.lr)    
     optim_v = optimizer.minimize(
         # losses['all'], 
-        0.1 * losses['D_KL'] + losses['log_p']  + losses['info'],
+        1 * losses['D_KL'] + losses['log_p'], #  + 10. * losses['info'],
         var_list=g_vars)
 
     optim_d1 = optimizer.minimize(
@@ -238,12 +238,12 @@ def main():
 
 
     optim_d = optimizer.minimize(
-        losses['gan_d'], # + 100 * losses['info'], 
+        losses['gan_d'] + 10. * losses['info'], # + 0.1 * losses['D_KL'], 
         var_list=d_vars)
         # var_list=list(set(d_vars + r_vars)))
 
     optim_g = optimizer.minimize(
-        losses['gan_g'] + 100 * losses['info'], # + 0.1 * losses['D_KL'], 
+        losses['gan_g'] + 10. * losses['info'], # + 0.1 * losses['D_KL'], 
         var_list=dec_vars)
 
     # Writer of Summary
@@ -253,7 +253,17 @@ def main():
     summaries = tf.merge_all_summaries()
 
     # Session
-    sess = tf.Session(config=tf.ConfigProto(log_device_placement=False))
+    gpu_options = tf.GPUOptions(
+        per_process_gpu_memory_fraction=0.49)
+    session_conf = tf.ConfigProto(
+        allow_soft_placement=True,
+        log_device_placement=False,
+        inter_op_parallelism_threads=10,
+        intra_op_parallelism_threads=10,
+        gpu_options=gpu_options)
+    sess = tf.Session(
+        config=session_conf)
+
     init = tf.initialize_all_variables()
     sess.run(init)
 

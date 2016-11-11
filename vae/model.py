@@ -205,22 +205,24 @@ class VAE2(object):
         with tf.variable_scope('vae'):
             for net in ['encoder', 'decoder', 'discriminator', 'recognizer']:
                 var[net] = dict()
-                if net == 'decoder':
-                    n_z = nwk_arch['encoder'][-1]
-                    n_y = nwk_arch['n_y']
-                    n_zy = n_z + n_y
-                    scope = 'z_to_zy'
-                    with tf.variable_scope(scope):
-                        # print(scope, scope.name)
-                        w, b = create_weight_and_bias([n_z, n_zy])
-                        var[net][scope] = {'weight': w, 'bias': b}
 
-                    scope = 'y_to_zy'
-                    with tf.variable_scope(scope):
-                        w, b = create_weight_and_bias([n_y, n_zy])
-                        var[net][scope] = {'weight': w, 'bias': b}
-                
                 with tf.variable_scope(net):
+                    if net == 'decoder':
+                        n_z = nwk_arch['encoder'][-1]
+                        n_y = nwk_arch['n_y']
+                        n_zy = n_z + n_y
+
+                        scope = 'z_to_zy'
+                        with tf.variable_scope(scope):
+                            # print(scope, scope.name)
+                            w, b = create_weight_and_bias([n_z, n_zy])
+                            var[net][scope] = {'weight': w, 'bias': b}
+
+                        scope = 'y_to_zy'
+                        with tf.variable_scope(scope):
+                            w, b = create_weight_and_bias([n_y, n_zy])
+                            var[net][scope] = {'weight': w, 'bias': b}
+                        
                     shapes = self.architecture[net]
                     print(net, shapes)
                     for i in range(len(shapes) -2):
@@ -283,20 +285,21 @@ class VAE2(object):
         net = 'decoder'
         n_nodes = self.architecture[net]
 
-        scope = 'z_to_zy'
-        with tf.name_scope('z_to_zy'):
-            w = var[net][scope]['weight']
-            b = var[net][scope]['bias']
-            z_to_zy = tf.matmul(z, w)
-
-        scope = 'y_to_zy'
-        with tf.name_scope('y_to_zy'):
-            w = var[net][scope]['weight']
-            b = var[net][scope]['bias']
-            y_to_zy = tf.add(tf.matmul(y, w), b)
-
-        x = tf.nn.relu(y_to_zy + z_to_zy)
         with tf.name_scope(net):
+            scope = 'z_to_zy'
+            with tf.name_scope('z_to_zy'):
+                w = var[net][scope]['weight']
+                b = var[net][scope]['bias']
+                z_to_zy = tf.matmul(z, w)
+
+            scope = 'y_to_zy'
+            with tf.name_scope('y_to_zy'):
+                w = var[net][scope]['weight']
+                b = var[net][scope]['bias']
+                y_to_zy = tf.add(tf.matmul(y, w), b)
+
+            x = tf.nn.relu(y_to_zy + z_to_zy)
+
             for i in range(len(n_nodes) -2):
                 layer = 'hidden{:d}'.format(i)
                 with tf.name_scope(layer):
