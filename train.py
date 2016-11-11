@@ -225,25 +225,25 @@ def main():
     optimizer = tf.train.AdamOptimizer(learning_rate=FLAGS.lr)    
     optim_v = optimizer.minimize(
         # losses['all'], 
-        0.05 * losses['D_KL'] + losses['log_p'],
+        0.1 * losses['D_KL'] + losses['log_p']  + losses['info'],
         var_list=g_vars)
 
     optim_d1 = optimizer.minimize(
         losses['gan_d'],
         var_list=d_vars)
 
-    optim_r1 = optimizer.minimize(
-        losses['info'],
-        var_list=r_vars)
+    # optim_r1 = optimizer.minimize(
+    #     losses['info'],
+    #     var_list=r_vars)
 
 
     optim_d = optimizer.minimize(
-        losses['gan_d'] + losses['info'], 
-        # var_list=d_vars)
-        var_list=list(set(d_vars + r_vars)))
+        losses['gan_d'], # + 100 * losses['info'], 
+        var_list=d_vars)
+        # var_list=list(set(d_vars + r_vars)))
 
     optim_g = optimizer.minimize(
-        losses['gan_g'] + losses['info'], 
+        losses['gan_g'] + 100 * losses['info'], # + 0.1 * losses['D_KL'], 
         var_list=dec_vars)
 
     # Writer of Summary
@@ -285,10 +285,10 @@ def main():
                 print('Storing metadata')
                 run_options = tf.RunOptions(
                     trace_level=tf.RunOptions.FULL_TRACE)
-                summary, loss_value, kld, logp, _, _, _ = sess.run(
+                summary, loss_value, kld, logp, _, _ = sess.run(
                     [summaries,
                     losses['all'], losses['D_KL'], losses['log_p'],
-                    optim_v, optim_d1, optim_r1],
+                    optim_v, optim_d1],
                     options=run_options,
                     run_metadata=run_metadata)
                 writer.add_summary(summary, step)
@@ -307,16 +307,16 @@ def main():
                 writer.add_summary(summary, step)
 
             else:
-                summary, loss_value, kld, logp, _, _, _ = sess.run(
+                summary, loss_value, kld, logp, _, _ = sess.run(
                     [summaries,
                     losses['all'], losses['D_KL'], losses['log_p'],
-                    optim_v, optim_d1, optim_r1])
+                    optim_v, optim_d1])
                 writer.add_summary(summary, step)
 
             duration = time.time() - start_time
 
             if step < FLAGS.step_gan:
-                print('step {:d}: D_KL = {:f}, log(p) = {:.2f} bits,'
+                print('step {:d}: D_KL = {:.2f}, log(p) = {:.2f} bits,'
                       ' ({:.3f} sec/step)'
                       .format(step, kld, logp / np.log(2.), duration))
             else:

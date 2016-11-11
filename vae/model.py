@@ -139,7 +139,7 @@ def SamplingLayer(
         shape = tf.shape(mu)
         # eps = tf.random_normal(
         eps = tf.truncated_normal(
-            shape=shape, mean=0.0, stddev=1.0, name='eps')
+            shape=shape, mean=0.0, stddev=1.0/6, name='eps')
         eps = tf.mul(std, eps)
         eps = tf.add(mu, eps)
         return eps
@@ -466,18 +466,20 @@ class VAE2(object):
 
 
                 # logits
-                c_T = self._recognize(x)
-                c_F = self._recognize(xh_mu)
+                # c_T = self._recognize(x)
+                # c_F = self._recognize(xh_mu)
+                # info_T_loss = tf.nn.softmax_cross_entropy_with_logits(
+                #     c_T,
+                #     y)
+                # info_F_loss = tf.nn.softmax_cross_entropy_with_logits(
+                #     c_F,
+                #     y)
+                # losses['info'] = tf.reduce_mean(info_T_loss + info_F_loss)
 
-                info_T_loss = tf.nn.softmax_cross_entropy_with_logits(
-                    c_T,
-                    y)
+                z_mu_, z_lv_ = self._encode(xh_mu)
+                losses['info'] = tf.reduce_mean(
+                    kld_of_gaussian(z_mu_, z_lv_, z_mu, z_lv))
 
-                info_F_loss = tf.nn.softmax_cross_entropy_with_logits(
-                    c_F,
-                    y)
-
-                losses['info'] = tf.reduce_mean(info_T_loss + info_F_loss)
 
                 # losses['p_t_t'] = tf.reduce_mean(logpTT)
                 # losses['p_f_f'] = tf.reduce_mean(logpFF)
