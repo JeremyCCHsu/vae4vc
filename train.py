@@ -208,13 +208,15 @@ def main():
 
     dec_vars = [var for var in trainable if 'decoder' in var.name]
 
+    enc_vars = [var for var in trainable if 'encoder' in var.name]
+
     r_vars = [var for var in trainable if 'recognizer' in var.name]
 
     # Update: G(VAE+Info), D wrt GAN, R wrt Info
 
     for varset, name in zip(
-            [g_vars, d_vars, r_vars, dec_vars], 
-            ['Generator', 'Discriminator', 'Recognizer', 'Decoder']):
+            [g_vars, d_vars, r_vars, dec_vars, enc_vars], 
+            ['Generator', 'Discriminator', 'Recognizer', 'Decoder', 'Encoder']):
         print(name)
         for v in varset:
             print(v.name)
@@ -237,13 +239,32 @@ def main():
     #     var_list=r_vars)
 
 
+    # loss = losses['gan_d'] + losses['D_KL'] + losses['info']
+    # loss = losses['gan_g'] + losses['D_KL'] + losses['info']
+
+
     optim_d = optimizer.minimize(
-        losses['gan_d'] + 10. * losses['info'], # + 0.1 * losses['D_KL'], 
+        losses['gan_d'],
+        # loss,
+        # losses['gan_d'], # + 10. * losses['info'], # + 0.1 * losses['D_KL'], 
         var_list=d_vars)
         # var_list=list(set(d_vars + r_vars)))
 
     optim_g = optimizer.minimize(
-        losses['gan_g'] + 10. * losses['info'], # + 0.1 * losses['D_KL'], 
+        losses['gan_g'] + losses['D_KL'] + losses['info'],
+        # -loss,
+        # losses['gan_g'], #+ 10. * losses['info'], # + 0.1 * losses['D_KL'], 
+        # var_list=dec_vars)
+        var_list=g_vars)
+
+
+    optim_enc = optimizer.minimize(
+        losses['D_KL'] + losses['info'],
+        var_list=enc_vars)
+
+    r = 1.
+    optim_dec = optimizer.minimize(
+        losses['gan_g'] + r * losses['info'],
         var_list=dec_vars)
 
     # Writer of Summary
@@ -310,10 +331,13 @@ def main():
                 summary, loss_d, ptt, pff, _ = sess.run(
                     [summaries,
                     losses['gan_d'], losses['p_t_t'], losses['p_f_f'],
+                    # optim_enc, optim_dec])
                     optim_d])
 
-                summary, loss_g, _ = sess.run(
-                    [summaries, losses['gan_g'], optim_g])
+                summary, loss_g, _, _ = sess.run(
+                    [summaries, losses['gan_g'],
+                    optim_enc, optim_dec])
+                    # optim_g])
                 writer.add_summary(summary, step)
 
             else:

@@ -480,9 +480,17 @@ class VAE2(object):
                 # losses['info'] = tf.reduce_mean(info_T_loss + info_F_loss)
 
                 z_mu_, z_lv_ = self._encode(xh_mu)
-                losses['info'] = tf.reduce_mean(
-                    kld_of_gaussian(z_mu_, z_lv_, z_mu, z_lv))
+                # losses['info'] = tf.reduce_mean(
+                #     kld_of_gaussian(z_mu_, z_lv_, z_mu, z_lv))
 
+
+                # log z
+                zeros = tf.zeros(tf.shape(z_mu_))
+                losses['info'] = - tf.reduce_mean(
+                    GaussianLogDensity(z_mu, z_mu_, zeros, 'L_Dis'))
+
+                # L = L_pri + L_dis + L_gan
+                #   = DKL(z) + logz + gan_d
 
                 # losses['p_t_t'] = tf.reduce_mean(logpTT)
                 # losses['p_f_f'] = tf.reduce_mean(logpFF)
