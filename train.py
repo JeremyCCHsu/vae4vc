@@ -11,30 +11,16 @@ from datetime import datetime
 from vae.model import VAE2
 from iohandler.spectral_reader import vc2016TFReader
 
-# BATCH_SIZE = 1
-# DATA_DIRECTORY = './VCTK-Corpus'
+
 LOGDIR_ROOT = './logdir'
 CHECKPOINT_EVERY = 50
-# NUM_STEPS = 4000
-# LEARNING_RATE = 0.02
-# WAVENET_PARAMS = './wavenet_params.json'
 STARTED_DATESTRING = "{0:%Y-%m%d-%H%M-%S}".format(datetime.now())
-# SAMPLE_SIZE = 100000
-# L2_REGULARIZATION_STRENGTH = 0
-# SILENCE_THRESHOLD = 0.3
 
 EPSILON = 1e-10
 
-
 FLAGS = tf.app.flags.FLAGS
-# tf.app.flags.DEFINE_string('source', 'SF1', 'list of source speakers')
-# tf.app.flags.DEFINE_string('target', 'TM3', 'list of target speakers')
-# tf.app.flags.DEFINE_string('{:s}-{:s}-trn', '', 'data dir')
-# tf.app.flags.DEFINE_string(
-#     'datadir', '/home/jrm/proj/vc2016b/S-T-trn', 'data dir')
 tf.app.flags.DEFINE_string(
     'datadir', '/home/jrm/proj/vc2016b/TR_log_SP_Z_LT8000', 'data dir')
-
 tf.app.flags.DEFINE_string(
     'architecture', 'architecture.json', 'network architecture')
 tf.app.flags.DEFINE_string(
@@ -87,11 +73,9 @@ def load(saver, sess, logdir):
         print(' No checkpoint found.')
         return None
 
-#
 def get_default_logdir(logdir_root):
     logdir = os.path.join(logdir_root, 'train', STARTED_DATESTRING)
     return logdir
-
 
 def validate_directories(args):
     """Validate and arrange directory related arguments."""
@@ -198,6 +182,8 @@ def main():
     # losses = net.get_losses()
     losses = net.loss(x, y, l2_regularization=FLAGS.l2_regularization)
     trainable = tf.trainable_variables()
+    losses['all'] = losses['log_p'] - losses['D_KL'] 
+    
 
     # [TODO] I disabled encoder update
     d_vars = [var for var in trainable if 'discriminator' in var.name]
@@ -226,35 +212,20 @@ def main():
 
     optimizer = tf.train.AdamOptimizer(learning_rate=FLAGS.lr)    
     optim_v = optimizer.minimize(
-        # losses['all'], 
-        1 * losses['D_KL'] + losses['log_p'], #  + 10. * losses['info'],
+        1. * losses['D_KL'] + losses['log_p'], #  + 10. * losses['info'],
         var_list=g_vars)
 
     optim_d1 = optimizer.minimize(
         losses['gan_d'],
         var_list=d_vars)
 
-    # optim_r1 = optimizer.minimize(
-    #     losses['info'],
-    #     var_list=r_vars)
-
-
-    # loss = losses['gan_d'] + losses['D_KL'] + losses['info']
-    # loss = losses['gan_g'] + losses['D_KL'] + losses['info']
-
 
     optim_d = optimizer.minimize(
         losses['gan_d'],
-        # loss,
-        # losses['gan_d'], # + 10. * losses['info'], # + 0.1 * losses['D_KL'], 
         var_list=d_vars)
-        # var_list=list(set(d_vars + r_vars)))
 
     optim_g = optimizer.minimize(
         losses['gan_g'] + losses['D_KL'] + losses['info'],
-        # -loss,
-        # losses['gan_g'], #+ 10. * losses['info'], # + 0.1 * losses['D_KL'], 
-        # var_list=dec_vars)
         var_list=g_vars)
 
 
@@ -330,14 +301,12 @@ def main():
             elif step >= FLAGS.step_gan:
                 summary, loss_d, ptt, pff, _ = sess.run(
                     [summaries,
-                    losses['gan_d'], losses['p_t_t'], losses['p_f_f'],
-                    # optim_enc, optim_dec])
-                    optim_d])
+                     losses['gan_d'], losses['p_t_t'], losses['p_f_f'],
+                     optim_d])
 
                 summary, loss_g, _, _ = sess.run(
                     [summaries, losses['gan_g'],
-                    optim_enc, optim_dec])
-                    # optim_g])
+                     optim_enc, optim_dec])
                 writer.add_summary(summary, step)
 
             else:
