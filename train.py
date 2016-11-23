@@ -11,30 +11,16 @@ from datetime import datetime
 from vae.model import VAE2
 from iohandler.spectral_reader import vc2016TFReader
 
-# BATCH_SIZE = 1
-# DATA_DIRECTORY = './VCTK-Corpus'
+
 LOGDIR_ROOT = './logdir'
 CHECKPOINT_EVERY = 50
-# NUM_STEPS = 4000
-# LEARNING_RATE = 0.02
-# WAVENET_PARAMS = './wavenet_params.json'
 STARTED_DATESTRING = "{0:%Y-%m%d-%H%M-%S}".format(datetime.now())
-# SAMPLE_SIZE = 100000
-# L2_REGULARIZATION_STRENGTH = 0
-# SILENCE_THRESHOLD = 0.3
 
 EPSILON = 1e-10
 
-
 FLAGS = tf.app.flags.FLAGS
-# tf.app.flags.DEFINE_string('source', 'SF1', 'list of source speakers')
-# tf.app.flags.DEFINE_string('target', 'TM3', 'list of target speakers')
-# tf.app.flags.DEFINE_string('{:s}-{:s}-trn', '', 'data dir')
-# tf.app.flags.DEFINE_string(
-#     'datadir', '/home/jrm/proj/vc2016b/S-T-trn', 'data dir')
 tf.app.flags.DEFINE_string(
     'datadir', '/home/jrm/proj/vc2016b/TR_log_SP_Z_LT8000', 'data dir')
-
 tf.app.flags.DEFINE_string(
     'architecture', 'architecture.json', 'network architecture')
 tf.app.flags.DEFINE_string(
@@ -87,11 +73,9 @@ def load(saver, sess, logdir):
         print(' No checkpoint found.')
         return None
 
-#
 def get_default_logdir(logdir_root):
     logdir = os.path.join(logdir_root, 'train', STARTED_DATESTRING)
     return logdir
-
 
 def validate_directories(args):
     """Validate and arrange directory related arguments."""
@@ -198,33 +182,27 @@ def main():
     # losses = net.get_losses()
     losses = net.loss(x, y, l2_regularization=FLAGS.l2_regularization)
     trainable = tf.trainable_variables()
+    losses['all'] = losses['log_p'] - losses['D_KL'] 
+    
 
     # [TODO] I disabled encoder update
     d_vars = [var for var in trainable if 'discriminator' in var.name]
-    # print('Discriminator')
-    # for v in d_vars:
-    #     print(v.name)
 
-    # print('Generator')
     g_vars = [var for var in trainable \
         if 'discriminator' not in var.name and 'recognizer' not in var.name \
-        # if 'encoder' in var.name or 'decoder' in var.name \
-        # and 'encoder' not in var.name
         ]
-
 
     dec_vars = [var for var in trainable if 'decoder' in var.name]
 
-    # for v in g_vars:
-    #     print(v.name)
+    enc_vars = [var for var in trainable if 'encoder' in var.name]
 
     r_vars = [var for var in trainable if 'recognizer' in var.name]
 
     # Update: G(VAE+Info), D wrt GAN, R wrt Info
 
     for varset, name in zip(
-            [g_vars, d_vars, r_vars, dec_vars], 
-            ['Generator', 'Discriminator', 'Recognizer', 'Decoder']):
+            [g_vars, d_vars, r_vars, dec_vars, enc_vars], 
+            ['Generator', 'Discriminator', 'Recognizer', 'Decoder', 'Encoder']):
         print(name)
         for v in varset:
             print(v.name)
@@ -232,48 +210,32 @@ def main():
 
 
 
-    # optimizer = tf.train.AdamOptimizer(learning_rate=FLAGS.lr)    
-    # optim = optimizer.minimize(losses['all'], var_list=trainable)
     optimizer = tf.train.AdamOptimizer(learning_rate=FLAGS.lr)    
-    optim = optimizer.minimize(
-        losses['all'], 
+    optim_v = optimizer.minimize(
+        1. * losses['D_KL'] + losses['log_p'], #  + 10. * losses['info'],
         var_list=g_vars)
 
     optim_d1 = optimizer.minimize(
         losses['gan_d'],
         var_list=d_vars)
 
-    optim_r1 = optimizer.minimize(
-        -losses['info'],
-        var_list=r_vars)
-
-
-    # loss_infogan = 
-
-    # optimizer_d = tf.train.AdamOptimizer(learning_rate=FLAGS.lr, name='opt_d')
-    # optim_d = optimizer_d.minimize(
-    #     losses['gan_d'] - losses['info'], 
-    #     var_list=list(set(d_vars + r_vars)))
 
     optim_d = optimizer.minimize(
-        losses['gan_d'] - losses['info'], 
-        # var_list=d_vars)
-        var_list=list(set(d_vars + r_vars)))
+        losses['gan_d'],
+        var_list=d_vars)
 
-    # optimizer_d = tf.train.AdamOptimizer(learning_rate=FLAGS.lr, name='opt_d')
-    # optim_d = optimizer_d.minimize(losses['gan_d'] + losses['all'], var_list=d_vars)
-
-    # optimizer_g = tf.train.AdamOptimizer(learning_rate=FLAGS.lr, name='opt_g')
-    # optim_g = optimizer_g.minimize(losses['gan_g'] + losses['D_KL'], var_list=g_vars)
-
-    # optimizer_g = tf.train.AdamOptimizer(learning_rate=FLAGS.lr, name='opt_g')
-    # optim_g = optimizer_g.minimize(losses['gan_g'], var_list=g_vars)
-
-
-    # optimizer_g = tf.train.AdamOptimizer(learning_rate=FLAGS.lr * 2., name='opt_g')
-    
     optim_g = optimizer.minimize(
-        losses['gan_g'],# - losses['info'], 
+        losses['gan_g'] + losses['D_KL'] + losses['info'],
+        var_list=g_vars)
+
+
+    optim_enc = optimizer.minimize(
+        losses['D_KL'] + losses['info'],
+        var_list=enc_vars)
+
+    r = 1.
+    optim_dec = optimizer.minimize(
+        losses['gan_g'] + r * losses['info'],
         var_list=dec_vars)
 
     # Writer of Summary
@@ -283,7 +245,17 @@ def main():
     summaries = tf.merge_all_summaries()
 
     # Session
-    sess = tf.Session(config=tf.ConfigProto(log_device_placement=False))
+    gpu_options = tf.GPUOptions(
+        per_process_gpu_memory_fraction=0.49)
+    session_conf = tf.ConfigProto(
+        allow_soft_placement=True,
+        log_device_placement=False,
+        inter_op_parallelism_threads=10,
+        intra_op_parallelism_threads=10,
+        gpu_options=gpu_options)
+    sess = tf.Session(
+        config=session_conf)
+
     init = tf.initialize_all_variables()
     sess.run(init)
 
@@ -295,7 +267,6 @@ def main():
         # if is_overwritten_training or saved_global_step is None:
         if saved_global_step is None:
             saved_global_step = -1
-        # print(saved_global_step)
     except:
         print(
             "Something went wrong while restoring checkpoint."
@@ -316,8 +287,10 @@ def main():
                 print('Storing metadata')
                 run_options = tf.RunOptions(
                     trace_level=tf.RunOptions.FULL_TRACE)
-                summary, loss_value, kld, logp, _, _, _ = sess.run(
-                    [summaries, losses['all'], losses['D_KL'], losses['log_p'], optim, optim_d1, optim_r1],
+                summary, loss_value, kld, logp, _, _ = sess.run(
+                    [summaries,
+                    losses['all'], losses['D_KL'], losses['log_p'],
+                    optim_v, optim_d1],
                     options=run_options,
                     run_metadata=run_metadata)
                 writer.add_summary(summary, step)
@@ -326,47 +299,46 @@ def main():
                     'step_{:04d}'.format(step))
                 # J: I didn't use the timeline.
             elif step >= FLAGS.step_gan:
-
-                # summary, loss_g, _ = sess.run([summaries, losses['gan_g'], optim_g])
-                summary, loss_g, _ = sess.run([summaries, losses['gan_g'], optim_g])
-                writer.add_summary(summary, step)
-
-
                 summary, loss_d, ptt, pff, _ = sess.run(
-                    [summaries, losses['gan_d'], losses['p_t_t'], 
-                     losses['p_f_f'], optim_d])
+                    [summaries,
+                     losses['gan_d'], losses['p_t_t'], losses['p_f_f'],
+                     optim_d])
+
+                summary, loss_g, _, _ = sess.run(
+                    [summaries, losses['gan_g'],
+                     optim_enc, optim_dec])
                 writer.add_summary(summary, step)
 
-                # # [TEST]
-                # loss_d, ptt, pff = sess.run(
-                #     [losses['gan_d'], losses['p_t_t'], losses['p_f_f']])
-
-                # # [TEST]
-                # loss_g = 0
             else:
-                summary, loss_value, kld, logp, _ = sess.run(
-                    [summaries, losses['all'], losses['D_KL'], losses['log_p'], optim])
+                summary, loss_value, kld, logp, _, _ = sess.run(
+                    [summaries,
+                    losses['all'], losses['D_KL'], losses['log_p'],
+                    optim_v, optim_d1])
                 writer.add_summary(summary, step)
-
 
             duration = time.time() - start_time
 
             if step < FLAGS.step_gan:
-                print('step {:d}: D_KL = {:f}, log(p) = {:f}, ({:.3f} sec/step)'
-                  .format(step, kld, logp, duration))
+                print('step {:d}: D_KL = {:.2f}, log(p) = {:.2f} bits,'
+                      ' ({:.3f} sec/step)'
+                      .format(step, kld, logp / np.log(2.), duration))
             else:
                 # print(ptt.shape, ptt.dtype)
-                print('step {:d}: D loss = {:.2f}, G\'s fooling ability = {:.2f}%, '
-                    'P(T|T) = {:.2f}%, P(F|F) = {:.2f}%, ({:.3f} sec/step)'
-                    .format(
+                print('step {:d}: D loss = {:.2f}, G loss= {:.2f}, '
+                      'L(T|T) = {:.2f}, L(F|F) = {:.2f}, ({:.3f} sec/step)'
+                      .format(
                         step,
                         loss_d,
-                        np.exp(-loss_g) * 100.,
-                        np.exp(ptt) * 100.,
-                        np.exp(pff) * 100.,
-                        duration)
-                )
+                        loss_g,
+                        ptt,
+                        pff,
+                        # np.exp(-loss_g) * 100.,
+                        # np.exp(ptt) * 100.,
+                        # np.exp(pff) * 100.,
+                        duration))
 
+            if step == FLAGS.step_gan - 1:
+                save(saver, sess, logdir, step)
 
             # if step % FLAGS.checkpoint_every == 0:
             #     save(saver, sess, logdir, step)

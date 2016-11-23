@@ -7,7 +7,7 @@ import json
 import pdb
 import numpy as np
 import tensorflow as tf
-# [TODO]
+
 import matplotlib as mpl
 mpl.use('Agg')
 import matplotlib.pyplot as plt
@@ -18,30 +18,16 @@ from iohandler.spectral_reader import vc2016TFWholeReader
 
 
 FLAGS = tf.app.flags.FLAGS
-# tf.app.flags.DEFINE_string('source', 'SF1', 'list of source speakers')
-# tf.app.flags.DEFINE_string('target', 'TM3', 'list of target speakers')
-# tf.app.flags.DEFINE_string('{:s}-{:s}-trn', '', 'data dir')
 tf.app.flags.DEFINE_string(
     'datadir', '/home/jrm/proj/vc2016b/TR_log_SP_Z_LT8000', 'data dir')
 tf.app.flags.DEFINE_string(
     'architecture', 'architecture.json', 'network architecture')
 tf.app.flags.DEFINE_string('logdir', 'logdir', 'log dir')
-# tf.app.flags.DEFINE_string(
-#     'logdir_root', None, 'log dir')
-# tf.app.flags.DEFINE_string(
-#     'restore_from', None, 'resotre form dir')
 tf.app.flags.DEFINE_string('checkpoint', None, 'model checkpoint')
-
-tf.app.flags.DEFINE_integer('batch_size', 128, 'batch size')
-tf.app.flags.DEFINE_float('l2_regularization', 0.0, 'L2 regularization')
-tf.app.flags.DEFINE_float('lr', 1e-3, 'learning rate')
-tf.app.flags.DEFINE_integer('num_steps', 10000, 'num of steps (frames)')
-
 tf.app.flags.DEFINE_string(
     'file_filter', '.*\.bin', 'filename filter')
 
-# TEST_PATTERN = 'SF1-100001.bin'
-TEST_PATTERN = '.*001\.bin'
+TEST_PATTERN = '.*151\.bin'
 N_SPEAKER = 10
 
 def main():
@@ -52,7 +38,6 @@ def main():
     # FLAGS
     started_datestring = "{0:%Y-%m%d-%H%M-%S}".format(datetime.now())
     logdir = os.path.join(FLAGS.logdir, 'generate', started_datestring)
-    # with open(FLAGS.)
 
     with open(FLAGS.architecture) as f:
         architecture = json.load(f)
@@ -66,11 +51,8 @@ def main():
         output_filename=True)
 
     net = VAE2(
-        # batch_size=spectrum.shape[0],
         batch_size=128,  # [TODO] useless?
         architecture=architecture)
-
-
 
     x_ = tf.placeholder(tf.float32)
     y_ = tf.placeholder(tf.float32)
@@ -103,12 +85,16 @@ def main():
         for spk in range(10):
             x_source, y_source, x_fname = sess.run([spectrum, label, filename])
 
+            xmin = np.load('test_tmp/xmin.npf.npy').astype(np.float32)
+            xmax = np.load('test_tmp/xmax.npf.npy').astype(np.float32)
+
+            x_source = (x_source - xmin) / (xmax - xmin)
+
             spkId = int(y_source[0])
 
             y_source = np.zeros((y_source.shape[0], 10))
             y_source[:, spkId] = 1.0
 
-            # print(x_fname)
             x_fname = os.path.basename(x_fname)
             x_fname = os.path.splitext(x_fname)[0]
             x_fname = x_fname.decode('UTF-8')
@@ -119,7 +105,7 @@ def main():
 
             z = sess.run(z_, feed_dict={x_: x_source})
             xh = sess.run(xh_, feed_dict={z_: z, y_: y_source})
-            # pdb.set_trace()
+
             x_all.append(x_source)
             z_all.append(z)
             xh_all.append(xh)
@@ -146,22 +132,24 @@ def main():
             
             plt.subplot(515)
             # pdb.set_trace()
-            plt.plot(xh_all[i][350])
+            plt.plot(xh_all[i][100])
             plt.hold(True)
-            plt.plot(x_all[i][350], 'r')
+            plt.plot(x_all[i][100], 'r')
             plt.savefig('test-{:s}.png'.format(names[i]))
             plt.close()
             
-            pdb.set_trace()
+            # pdb.set_trace()
 
 
         # ============ Plot converted spectra (10 subplots) ==========
         # x_source = sess.run(spectrum)
+        x_c_all = list()
         plt.figure(figsize=(48, 12))
         for spk in range(10):
             y_target = np.zeros([x_source.shape[0], N_SPEAKER])
             y_target[:, spk] = 1.0
             x_converted = sess.run(xh_, feed_dict={x_: x_source, y_: y_target})
+            x_c_all.append(x_converted)
             plt.subplot(3, 4, spk + 1)
             plt.imshow(np.flipud(x_converted.T), aspect='auto')
             # plt.axis('off')
@@ -169,13 +157,16 @@ def main():
             plt.title(id2name[spk])
         plt.savefig('test-{:s}-as-source.png'.format(x_fname))
 
+        plt.figure()
+        for i in range(10):
+            plt.plot(x_c_all[i][100])
+        plt.savefig('test-plots.png')
 
     except KeyboardInterrupt:
         print('Interrupted')
     finally:
         coord.request_stop()
         coord.join(threads)
-
 
 
 if __name__ == '__main__':
